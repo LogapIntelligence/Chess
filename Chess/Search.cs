@@ -20,9 +20,18 @@ public class Search
     private bool _stop;
     private int _selDepth;
 
+    // Add fields for periodic info output
+    private long _lastInfoTime;
+    private const long InfoInterval = 100; // Output info every 100ms
+
     // Principal variation
     private readonly Move[,] _pvTable = new Move[MaxDepth, MaxDepth];
     private readonly int[] _pvLength = new int[MaxDepth];
+
+    // Current search info
+    private int _currentDepth;
+    private int _currentScore;
+    private Move _currentBestMove;
 
     public Search(int ttSizeMb = 128)
     {
@@ -38,30 +47,38 @@ public class Search
         _stop = false;
         _nodes = 0;
         _selDepth = 0;
+        _lastInfoTime = 0;
+        _currentDepth = 0;
+        _currentScore = 0;
+        _currentBestMove = default;
 
         Move bestMove = default;
         int bestScore = -Infinity;
 
+        // Initial output
+        SendInfo(1, 0, 0, "");
+
         // Iterative deepening
         for (int depth = 1; depth <= maxDepth && !_stop; depth++)
         {
+            _currentDepth = depth;
             int score = AlphaBeta(ref board, depth, -Infinity, Infinity, 0, true);
 
             if (!_stop)
             {
                 bestScore = score;
+                _currentScore = score;
                 if (_pvLength[0] > 0)
+                {
                     bestMove = _pvTable[0, 0];
+                    _currentBestMove = bestMove;
+                }
 
-                // UCI info output
-                long time = _timer.ElapsedMilliseconds;
-                long nps = time > 0 ? (_nodes * 1000) / time : 0;
-
-                Console.WriteLine($"info depth {depth} seldepth {_selDepth} score cp {bestScore} " +
-                                $"nodes {_nodes} nps {nps} time {time} pv {GetPvString()}");
+                // Always output info after completing a depth
+                SendInfo(depth, _selDepth, bestScore, GetPvString());
 
                 // Time management - stop if we've used enough time
-                if (time > _timeAllocated / 3)
+                if (timeMs != long.MaxValue && _timer.ElapsedMilliseconds > timeMs / 3)
                     break;
             }
         }
@@ -69,13 +86,53 @@ public class Search
         return bestMove;
     }
 
+    private void SendInfo(int depth, int selDepth, int score, string pv)
+    {
+        long time = _timer.ElapsedMilliseconds;
+        long nps = time > 0 ? (_nodes * 1000) / time : 0;
+
+        string scoreStr = FormatScore(score);
+
+        Console.WriteLine($"info depth {depth} seldepth {selDepth} score {scoreStr} " +
+                        $"nodes {_nodes} nps {nps} time {time} pv {pv}");
+        Console.Out.Flush(); // Critical for GUI communication!
+    }
+
+    private string FormatScore(int score)
+    {
+        if (Math.Abs(score) > MateScore - 1000)
+        {
+            // It's a mate score
+            int mateIn = (MateScore - Math.Abs(score) + 1) / 2;
+            return score > 0 ? $"mate {mateIn}" : $"mate -{mateIn}";
+        }
+        else
+        {
+            return $"cp {score}";
+        }
+    }
+
     private int AlphaBeta(ref Board board, int depth, int alpha, int beta, int ply, bool isPvNode)
     {
-        // Check time
-        if ((_nodes & 2047) == 0 && _timer.ElapsedMilliseconds > _timeAllocated)
+        // Check for periodic info output
+        if ((_nodes & 4095) == 0) // Check every 4096 nodes
         {
-            _stop = true;
-            return 0;
+            long currentTime = _timer.ElapsedMilliseconds;
+
+            // Check timeout
+            if (_timeAllocated != long.MaxValue && currentTime > _timeAllocated)
+            {
+                _stop = true;
+                return 0;
+            }
+
+            // Send periodic info
+            if (currentTime - _lastInfoTime >= InfoInterval)
+            {
+                _lastInfoTime = currentTime;
+                string pv = _currentBestMove != default ? _currentBestMove.ToString() : "";
+                SendInfo(_currentDepth, _selDepth, _currentScore, pv);
+            }
         }
 
         _pvLength[ply] = ply;
@@ -189,6 +246,16 @@ public class Search
                     _pvTable[ply, ply] = move;
                     Array.Copy(_pvTable, (ply + 1) * MaxDepth, _pvTable, ply * MaxDepth + 1, _pvLength[ply + 1] - ply - 1);
                     _pvLength[ply] = _pvLength[ply + 1];
+
+                    // Update current best at root
+                    if (ply == 0)
+                    {
+                        _currentBestMove = move;
+                        _currentScore = score;
+
+                        // Send info immediately when we find a new best move at root
+                        SendInfo(_currentDepth, _selDepth, score, GetPvString());
+                    }
 
                     if (score >= beta)
                     {

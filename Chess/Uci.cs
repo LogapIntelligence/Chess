@@ -13,6 +13,7 @@ public class Uci
     private CancellationTokenSource? _searchCts;
     private bool _ponder = false;
     private int _multiPv = 1;
+    private bool _debug = false;
 
     private const string EngineName = "ChessEngine";
     private const string Author = "Your Name";
@@ -34,67 +35,90 @@ public class Uci
 
     public void Run()
     {
-        Console.WriteLine($"{EngineName} by {Author}");
+        SendOutput($"{EngineName} by {Author}");
 
         string? input;
         while ((input = Console.ReadLine()) != null)
         {
+            if (_debug)
+                SendOutput($"info string received: {input}");
+
             string[] tokens = input.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (tokens.Length == 0) continue;
 
-            switch (tokens[0])
+            try
             {
-                case "uci":
-                    HandleUci();
-                    break;
-                case "isready":
-                    Console.WriteLine("readyok");
-                    break;
-                case "ucinewgame":
-                    HandleNewGame();
-                    break;
-                case "position":
-                    HandlePosition(tokens);
-                    break;
-                case "go":
-                    HandleGo(tokens);
-                    break;
-                case "stop":
-                    HandleStop();
-                    break;
-                case "quit":
-                    HandleStop();
-                    return;
-                case "d":
-                case "display":
-                    DisplayBoard();
-                    break;
-                case "eval":
-                    Console.WriteLine($"Evaluation: {Evaluation.Evaluate(ref _board)}");
-                    break;
-                case "perft":
-                    if (tokens.Length > 1 && int.TryParse(tokens[1], out int depth))
-                        Perft(depth);
-                    break;
-                case "setoption":
-                    HandleSetOption(tokens);
-                    break;
-                default:
-                    Console.WriteLine($"Unknown command: {tokens[0]}");
-                    break;
+                switch (tokens[0])
+                {
+                    case "uci":
+                        HandleUci();
+                        break;
+                    case "debug":
+                        if (tokens.Length > 1)
+                            _debug = tokens[1] == "on";
+                        break;
+                    case "isready":
+                        SendOutput("readyok");
+                        break;
+                    case "ucinewgame":
+                        HandleNewGame();
+                        break;
+                    case "position":
+                        HandlePosition(tokens);
+                        break;
+                    case "go":
+                        HandleGo(tokens);
+                        break;
+                    case "stop":
+                        HandleStop();
+                        break;
+                    case "quit":
+                        HandleStop();
+                        return;
+                    case "d":
+                    case "display":
+                        DisplayBoard();
+                        break;
+                    case "eval":
+                        SendOutput($"Evaluation: {Evaluation.Evaluate(ref _board)}");
+                        break;
+                    case "perft":
+                        if (tokens.Length > 1 && int.TryParse(tokens[1], out int depth))
+                            Perft(depth);
+                        break;
+                    case "setoption":
+                        HandleSetOption(tokens);
+                        break;
+                    default:
+                        if (_debug)
+                            SendOutput($"info string unknown command: {tokens[0]}");
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                if (_debug)
+                    SendOutput($"info string error: {ex.Message}");
             }
         }
     }
 
+    private void SendOutput(string message)
+    {
+        Console.WriteLine(message);
+        Console.Out.Flush(); // Critical for GUI communication!
+    }
+
     private void HandleUci()
     {
-        Console.WriteLine($"id name {EngineName}");
-        Console.WriteLine($"id author {Author}");
-        Console.WriteLine("option name Hash type spin default 128 min 1 max 16384");
-        Console.WriteLine("option name Threads type spin default 1 min 1 max 1");
-        Console.WriteLine("option name Ponder type check default false");
-        Console.WriteLine("option name MultiPV type spin default 1 min 1 max 500");
-        Console.WriteLine("uciok");
+        SendOutput($"id name {EngineName}");
+        SendOutput($"id author {Author}");
+        SendOutput("option name Hash type spin default 128 min 1 max 16384");
+        SendOutput("option name Threads type spin default 1 min 1 max 1");
+        SendOutput("option name Ponder type check default false");
+        SendOutput("option name MultiPV type spin default 1 min 1 max 500");
+        SendOutput("option name Debug type check default false");
+        SendOutput("uciok");
     }
 
     private void HandleSetOption(string[] tokens)
@@ -112,31 +136,20 @@ public class Uci
                 {
                     // Recreate search with new hash size
                     _search = new Search(hashSize);
+                    if (_debug)
+                        SendOutput($"info string hash size set to {hashSize} MB");
                 }
                 break;
             case "ponder":
-                // Store ponder setting for future use
                 _ponder = value.ToLower() == "true";
                 break;
             case "multipv":
-                // Store MultiPV setting
                 if (int.TryParse(value, out int multiPv))
                     _multiPv = multiPv;
                 break;
-        }
-    }
-
-    private string FormatScore(int score)
-    {
-        if (Math.Abs(score) > MateScore - 1000)
-        {
-            // It's a mate score
-            int mateIn = (MateScore - Math.Abs(score) + 1) / 2;
-            return score > 0 ? $"mate {mateIn}" : $"mate -{mateIn}";
-        }
-        else
-        {
-            return $"cp {score}";
+            case "debug":
+                _debug = value.ToLower() == "true";
+                break;
         }
     }
 
@@ -169,7 +182,7 @@ public class Uci
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Invalid FEN: {ex.Message}");
+                    SendOutput($"info string error parsing FEN: {ex.Message}");
                     return;
                 }
             }
@@ -184,22 +197,12 @@ public class Uci
             {
                 if (!TryParseMove(tokens[i], out Move move))
                 {
-                    Console.WriteLine($"Invalid move: {tokens[i]}");
+                    SendOutput($"info string invalid move: {tokens[i]}");
                     break;
                 }
                 _board.MakeMove(move);
+                _positionHistory.AddPosition(_board);
             }
-        }
-
-        for (int i = index; i < tokens.Length; i++)
-        {
-            if (!TryParseMove(tokens[i], out Move move))
-            {
-                Console.WriteLine($"Invalid move: {tokens[i]}");
-                break;
-            }
-            _board.MakeMove(move);
-            _positionHistory.AddPosition(_board);
         }
     }
 
@@ -212,6 +215,7 @@ public class Uci
         long timeMs = 10000; // Default 10 seconds
         long wtime = 0, btime = 0, winc = 0, binc = 0;
         int movestogo = 40;
+        bool infinite = false;
 
         // Parse go parameters
         for (int i = 1; i < tokens.Length; i++)
@@ -249,13 +253,17 @@ public class Uci
                         i++;
                     break;
                 case "infinite":
+                    infinite = true;
                     timeMs = long.MaxValue;
+                    break;
+                case "ponder":
+                    // Handle ponder mode if needed
                     break;
             }
         }
 
         // Calculate time for this move
-        if (wtime > 0 || btime > 0)
+        if (!infinite && (wtime > 0 || btime > 0))
         {
             long timeLeft = _board.SideToMove == Color.White ? wtime : btime;
             long increment = _board.SideToMove == Color.White ? winc : binc;
@@ -264,6 +272,9 @@ public class Uci
             timeMs = Math.Min(timeLeft / movestogo + increment / 2, timeLeft / 2);
             timeMs = Math.Max(timeMs, 1); // At least 1ms
         }
+
+        if (_debug)
+            SendOutput($"info string search depth={depth} time={timeMs}ms");
 
         // Start search in background
         _searchCts = new CancellationTokenSource();
@@ -275,12 +286,13 @@ public class Uci
                 Move bestMove = _search.Think(ref boardCopy, timeMs, depth);
                 if (!_searchCts.Token.IsCancellationRequested)
                 {
-                    Console.WriteLine($"bestmove {bestMove}");
+                    SendOutput($"bestmove {bestMove}");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error in search: {ex.Message}");
+                SendOutput($"info string error in search: {ex.Message}");
+                SendOutput("bestmove 0000"); // Send null move on error
             }
         }, _searchCts.Token);
     }
@@ -359,12 +371,13 @@ public class Uci
 
     private void DisplayBoard()
     {
-        Console.WriteLine("\n  a b c d e f g h");
-        Console.WriteLine("  ---------------");
+        var output = new System.Text.StringBuilder();
+        output.AppendLine("\n  a b c d e f g h");
+        output.AppendLine("  ---------------");
 
         for (int rank = 7; rank >= 0; rank--)
         {
-            Console.Write($"{rank + 1}|");
+            output.Append($"{rank + 1}|");
             for (int file = 0; file < 8; file++)
             {
                 int square = rank * 8 + file;
@@ -384,29 +397,68 @@ public class Uci
                 if (color == Color.White && pieceChar != '.')
                     pieceChar = char.ToUpper(pieceChar);
 
-                Console.Write($"{pieceChar} ");
+                output.Append($"{pieceChar} ");
             }
-            Console.WriteLine($"|{rank + 1}");
+            output.AppendLine($"|{rank + 1}");
         }
 
-        Console.WriteLine("  ---------------");
-        Console.WriteLine("  a b c d e f g h\n");
-        Console.WriteLine($"Side to move: {_board.SideToMove}");
-        Console.WriteLine($"Castling rights: {_board.CastlingRights}");
-        Console.WriteLine($"En passant: {(_board.EnPassantSquare >= 0 ? $"{(char)('a' + _board.EnPassantSquare % 8)}{_board.EnPassantSquare / 8 + 1}" : "-")}");
-        Console.WriteLine($"Halfmove clock: {_board.HalfmoveClock}");
-        Console.WriteLine($"Fullmove number: {_board.FullmoveNumber}");
+        output.AppendLine("  ---------------");
+        output.AppendLine("  a b c d e f g h\n");
+        output.AppendLine($"FEN: {FenParser.ToFen(ref _board)}");
+        output.AppendLine($"Side to move: {_board.SideToMove}");
+        output.AppendLine($"Castling rights: {_board.CastlingRights}");
+        output.AppendLine($"En passant: {(_board.EnPassantSquare >= 0 ? $"{(char)('a' + _board.EnPassantSquare % 8)}{_board.EnPassantSquare / 8 + 1}" : "-")}");
+        output.AppendLine($"Halfmove clock: {_board.HalfmoveClock}");
+        output.AppendLine($"Fullmove number: {_board.FullmoveNumber}");
+
+        SendOutput(output.ToString());
     }
 
     private void Perft(int depth)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        long nodes = PerftRecursive(ref _board, depth);
-        sw.Stop();
 
-        Console.WriteLine($"Nodes: {nodes}");
-        Console.WriteLine($"Time: {sw.ElapsedMilliseconds} ms");
-        Console.WriteLine($"NPS: {(nodes * 1000) / Math.Max(sw.ElapsedMilliseconds, 1)}");
+        SendOutput($"Starting perft({depth})...");
+
+        // Use divide for depth > 1
+        if (depth > 1)
+        {
+            PerftDivide(depth);
+        }
+        else
+        {
+            long nodes = PerftRecursive(ref _board, depth);
+            sw.Stop();
+
+            SendOutput($"Nodes: {nodes}");
+            SendOutput($"Time: {sw.ElapsedMilliseconds} ms");
+            SendOutput($"NPS: {(nodes * 1000) / Math.Max(sw.ElapsedMilliseconds, 1)}");
+        }
+    }
+
+    private void PerftDivide(int depth)
+    {
+        MoveList moves = new MoveList();
+        MoveGenerator.GenerateMoves(ref _board, ref moves);
+
+        long totalNodes = 0;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        for (int i = 0; i < moves.Count; i++)
+        {
+            Board copy = _board;
+            copy.MakeMove(moves[i]);
+            long nodes = depth == 1 ? 1 : PerftRecursive(ref copy, depth - 1);
+            totalNodes += nodes;
+            SendOutput($"{moves[i]}: {nodes}");
+        }
+
+        sw.Stop();
+        double nps = totalNodes / Math.Max(sw.Elapsed.TotalSeconds, 0.001);
+
+        SendOutput($"\nTotal: {totalNodes} nodes");
+        SendOutput($"Time: {sw.ElapsedMilliseconds}ms");
+        SendOutput($"NPS: {nps:N0}");
     }
 
     private long PerftRecursive(ref Board board, int depth)
