@@ -9,6 +9,7 @@ public class Uci
 {
     private Board _board;
     private readonly Search _search;
+    private PositionHistory _positionHistory;
     private CancellationTokenSource? _searchCts;
 
     private const string EngineName = "ChessEngine";
@@ -17,7 +18,15 @@ public class Uci
     public Uci()
     {
         _board = Board.StartingPosition();
-        _search = new Search(128); // 128 MB hash
+        _search = new Search(128);
+        _positionHistory = new PositionHistory(_board);
+    }
+
+    private void HandleNewGame()
+    {
+        _board = Board.StartingPosition();
+        _search.ClearHash();
+        _positionHistory = new PositionHistory(_board);
     }
 
     public void Run()
@@ -64,6 +73,9 @@ public class Uci
                     if (tokens.Length > 1 && int.TryParse(tokens[1], out int depth))
                         Perft(depth);
                     break;
+                case "setoption":
+                    HandleSetOption(tokens);
+                    break;
                 default:
                     Console.WriteLine($"Unknown command: {tokens[0]}");
                     break;
@@ -77,13 +89,52 @@ public class Uci
         Console.WriteLine($"id author {Author}");
         Console.WriteLine("option name Hash type spin default 128 min 1 max 16384");
         Console.WriteLine("option name Threads type spin default 1 min 1 max 1");
+        Console.WriteLine("option name Ponder type check default false");
+        Console.WriteLine("option name MultiPV type spin default 1 min 1 max 500");
         Console.WriteLine("uciok");
     }
 
-    private void HandleNewGame()
+    private void HandleSetOption(string[] tokens)
     {
-        _board = Board.StartingPosition();
-        _search.ClearHash();
+        if (tokens.Length < 5 || tokens[1] != "name" || tokens[3] != "value")
+            return;
+
+        string optionName = tokens[2].ToLower();
+        string value = string.Join(" ", tokens.Skip(4));
+
+        switch (optionName)
+        {
+            case "hash":
+                if (int.TryParse(value, out int hashSize))
+                {
+                    // Recreate search with new hash size
+                    _search = new Search(hashSize);
+                }
+                break;
+            case "ponder":
+                // Store ponder setting for future use
+                _ponder = value.ToLower() == "true";
+                break;
+            case "multipv":
+                // Store MultiPV setting
+                if (int.TryParse(value, out int multiPv))
+                    _multiPv = multiPv;
+                break;
+        }
+    }
+
+    private string FormatScore(int score)
+    {
+        if (Math.Abs(score) > MateScore - 1000)
+        {
+            // It's a mate score
+            int mateIn = (MateScore - Math.Abs(score) + 1) / 2;
+            return score > 0 ? $"mate {mateIn}" : $"mate -{mateIn}";
+        }
+        else
+        {
+            return $"cp {score}";
+        }
     }
 
     private void HandlePosition(string[] tokens)
@@ -121,6 +172,8 @@ public class Uci
             }
         }
 
+        _positionHistory = new PositionHistory(_board);
+
         if (index < tokens.Length && tokens[index] == "moves")
         {
             index++;
@@ -133,6 +186,17 @@ public class Uci
                 }
                 _board.MakeMove(move);
             }
+        }
+
+        for (int i = index; i < tokens.Length; i++)
+        {
+            if (!TryParseMove(tokens[i], out Move move))
+            {
+                Console.WriteLine($"Invalid move: {tokens[i]}");
+                break;
+            }
+            _board.MakeMove(move);
+            _positionHistory.AddPosition(_board);
         }
     }
 
