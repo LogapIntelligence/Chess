@@ -8,12 +8,15 @@ using System.Threading.Tasks;
 public class Uci
 {
     private Board _board;
-    private readonly Search _search;
+    private Search _search;
     private PositionHistory _positionHistory;
     private CancellationTokenSource? _searchCts;
+    private bool _ponder = false;
+    private int _multiPv = 1;
 
     private const string EngineName = "ChessEngine";
     private const string Author = "Your Name";
+    private const int MateScore = 100000;
 
     public Uci()
     {

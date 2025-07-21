@@ -44,7 +44,8 @@
         public void Clear()
         {
             _history.Clear();
-            _history.Add(Zobrist.ComputeHash(ref _rootPosition));
+            var rootCopy = _rootPosition; // Make a copy since it's readonly
+            _history.Add(Zobrist.ComputeHash(ref rootCopy));
         }
     }
 }
