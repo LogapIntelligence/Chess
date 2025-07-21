@@ -15,7 +15,7 @@ public class Uci
     private int _multiPv = 1;
     private bool _debug = false;
 
-    private const string EngineName = "ChessEngine";
+    private const string EngineName = "ChessEngine1";
     private const string Author = "Your Name";
     private const int MateScore = 100000;
 
@@ -35,8 +35,7 @@ public class Uci
 
     public void Run()
     {
-        SendOutput($"{EngineName} by {Author}");
-
+        // Don't output anything on startup - wait for UCI command
         string? input;
         while ((input = Console.ReadLine()) != null)
         {

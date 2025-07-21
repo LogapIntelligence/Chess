@@ -55,13 +55,30 @@ public class Search
         Move bestMove = default;
         int bestScore = -Infinity;
 
-        // Initial output
-        SendInfo(1, 0, 0, "");
+        // Generate initial moves to get a valid first move
+        MoveList initialMoves = new MoveList();
+        MoveGenerator.GenerateMoves(ref board, ref initialMoves);
+        if (initialMoves.Count > 0)
+        {
+            bestMove = initialMoves[0];
+            _currentBestMove = bestMove;
+        }
 
         // Iterative deepening
         for (int depth = 1; depth <= maxDepth && !_stop; depth++)
         {
             _currentDepth = depth;
+
+            // Send info at the start of each depth
+            if (depth == 1 && bestMove != default)
+            {
+                // For depth 1, do a quick evaluation
+                Board testBoard = board;
+                testBoard.MakeMove(bestMove);
+                int quickScore = -Evaluation.Evaluate(ref testBoard);
+                SendInfo(1, 1, quickScore, bestMove.ToString());
+            }
+
             int score = AlphaBeta(ref board, depth, -Infinity, Infinity, 0, true);
 
             if (!_stop)
