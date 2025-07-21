@@ -7,10 +7,11 @@ class Program
 {
     static void Main(string[] args)
     {
-        Performance.RunAllBenchmarks();
+        // Initialize magic bitboards and other static data
+        Console.WriteLine("Initializing chess engine...");
 
-        //Tests.RunAllTests();
-
-        Console.ReadLine();
+        // Run UCI protocol
+        var uci = new Uci();
+        uci.Run();
     }
 }

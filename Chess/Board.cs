@@ -261,7 +261,7 @@ public struct Board
             {
                 int rookFrom = to + 1;
                 int rookTo = to - 1;
-                ulong rookFromToBit = (1UL << rookFrom) | (1UL << rookTo);
+                ulong rookFromToBit = 1UL << rookFrom | 1UL << rookTo;
                 if (color == Color.White)
                     WhiteRooks ^= rookFromToBit;
                 else
@@ -271,7 +271,7 @@ public struct Board
             {
                 int rookFrom = to - 2;
                 int rookTo = to + 1;
-                ulong rookFromToBit = (1UL << rookFrom) | (1UL << rookTo);
+                ulong rookFromToBit = 1UL << rookFrom | 1UL << rookTo;
                 if (color == Color.White)
                     WhiteRooks ^= rookFromToBit;
                 else

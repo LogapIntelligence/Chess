@@ -1,0 +1,366 @@
+﻿namespace Chess;
+
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+
+public class Uci
+{
+    private Board _board;
+    private readonly Search _search;
+    private CancellationTokenSource? _searchCts;
+
+    private const string EngineName = "ChessEngine";
+    private const string Author = "Your Name";
+
+    public Uci()
+    {
+        _board = Board.StartingPosition();
+        _search = new Search(128); // 128 MB hash
+    }
+
+    public void Run()
+    {
+        Console.WriteLine($"{EngineName} by {Author}");
+
+        string? input;
+        while ((input = Console.ReadLine()) != null)
+        {
+            string[] tokens = input.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length == 0) continue;
+
+            switch (tokens[0])
+            {
+                case "uci":
+                    HandleUci();
+                    break;
+                case "isready":
+                    Console.WriteLine("readyok");
+                    break;
+                case "ucinewgame":
+                    HandleNewGame();
+                    break;
+                case "position":
+                    HandlePosition(tokens);
+                    break;
+                case "go":
+                    HandleGo(tokens);
+                    break;
+                case "stop":
+                    HandleStop();
+                    break;
+                case "quit":
+                    HandleStop();
+                    return;
+                case "d":
+                case "display":
+                    DisplayBoard();
+                    break;
+                case "eval":
+                    Console.WriteLine($"Evaluation: {Evaluation.Evaluate(ref _board)}");
+                    break;
+                case "perft":
+                    if (tokens.Length > 1 && int.TryParse(tokens[1], out int depth))
+                        Perft(depth);
+                    break;
+                default:
+                    Console.WriteLine($"Unknown command: {tokens[0]}");
+                    break;
+            }
+        }
+    }
+
+    private void HandleUci()
+    {
+        Console.WriteLine($"id name {EngineName}");
+        Console.WriteLine($"id author {Author}");
+        Console.WriteLine("option name Hash type spin default 128 min 1 max 16384");
+        Console.WriteLine("option name Threads type spin default 1 min 1 max 1");
+        Console.WriteLine("uciok");
+    }
+
+    private void HandleNewGame()
+    {
+        _board = Board.StartingPosition();
+        _search.ClearHash();
+    }
+
+    private void HandlePosition(string[] tokens)
+    {
+        int index = 1;
+
+        if (index < tokens.Length && tokens[index] == "startpos")
+        {
+            _board = Board.StartingPosition();
+            index++;
+        }
+        else if (index < tokens.Length && tokens[index] == "fen")
+        {
+            index++;
+            // Reconstruct FEN string from remaining tokens until "moves"
+            var fenParts = new List<string>();
+            while (index < tokens.Length && tokens[index] != "moves")
+            {
+                fenParts.Add(tokens[index]);
+                index++;
+            }
+
+            if (fenParts.Count > 0)
+            {
+                string fen = string.Join(" ", fenParts);
+                try
+                {
+                    _board = FenParser.ParseFen(fen);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Invalid FEN: {ex.Message}");
+                    return;
+                }
+            }
+        }
+
+        if (index < tokens.Length && tokens[index] == "moves")
+        {
+            index++;
+            for (int i = index; i < tokens.Length; i++)
+            {
+                if (!TryParseMove(tokens[i], out Move move))
+                {
+                    Console.WriteLine($"Invalid move: {tokens[i]}");
+                    break;
+                }
+                _board.MakeMove(move);
+            }
+        }
+    }
+
+    private void HandleGo(string[] tokens)
+    {
+        // Stop any ongoing search
+        HandleStop();
+
+        int depth = int.MaxValue;
+        long timeMs = 10000; // Default 10 seconds
+        long wtime = 0, btime = 0, winc = 0, binc = 0;
+        int movestogo = 40;
+
+        // Parse go parameters
+        for (int i = 1; i < tokens.Length; i++)
+        {
+            switch (tokens[i])
+            {
+                case "depth":
+                    if (i + 1 < tokens.Length && int.TryParse(tokens[i + 1], out int d))
+                        depth = d;
+                    i++;
+                    break;
+                case "movetime":
+                    if (i + 1 < tokens.Length && long.TryParse(tokens[i + 1], out long mt))
+                        timeMs = mt;
+                    i++;
+                    break;
+                case "wtime":
+                    if (i + 1 < tokens.Length && long.TryParse(tokens[i + 1], out wtime))
+                        i++;
+                    break;
+                case "btime":
+                    if (i + 1 < tokens.Length && long.TryParse(tokens[i + 1], out btime))
+                        i++;
+                    break;
+                case "winc":
+                    if (i + 1 < tokens.Length && long.TryParse(tokens[i + 1], out winc))
+                        i++;
+                    break;
+                case "binc":
+                    if (i + 1 < tokens.Length && long.TryParse(tokens[i + 1], out binc))
+                        i++;
+                    break;
+                case "movestogo":
+                    if (i + 1 < tokens.Length && int.TryParse(tokens[i + 1], out movestogo))
+                        i++;
+                    break;
+                case "infinite":
+                    timeMs = long.MaxValue;
+                    break;
+            }
+        }
+
+        // Calculate time for this move
+        if (wtime > 0 || btime > 0)
+        {
+            long timeLeft = _board.SideToMove == Color.White ? wtime : btime;
+            long increment = _board.SideToMove == Color.White ? winc : binc;
+
+            // Simple time management
+            timeMs = Math.Min(timeLeft / movestogo + increment / 2, timeLeft / 2);
+            timeMs = Math.Max(timeMs, 1); // At least 1ms
+        }
+
+        // Start search in background
+        _searchCts = new CancellationTokenSource();
+        var boardCopy = _board; // Struct copy
+        Task.Run(() =>
+        {
+            try
+            {
+                Move bestMove = _search.Think(ref boardCopy, timeMs, depth);
+                if (!_searchCts.Token.IsCancellationRequested)
+                {
+                    Console.WriteLine($"bestmove {bestMove}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in search: {ex.Message}");
+            }
+        }, _searchCts.Token);
+    }
+
+    private void HandleStop()
+    {
+        _search.Stop();
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+        _searchCts = null;
+    }
+
+    private bool TryParseMove(string moveStr, out Move move)
+    {
+        move = default;
+
+        if (moveStr.Length < 4 || moveStr.Length > 5)
+            return false;
+
+        int from = ParseSquare(moveStr.Substring(0, 2));
+        int to = ParseSquare(moveStr.Substring(2, 2));
+
+        if (from < 0 || to < 0)
+            return false;
+
+        // Generate legal moves to find the matching one
+        MoveList moves = new MoveList();
+        MoveGenerator.GenerateMoves(ref _board, ref moves);
+
+        for (int i = 0; i < moves.Count; i++)
+        {
+            Move m = moves[i];
+            if (m.From == from && m.To == to)
+            {
+                // Check promotion
+                if (moveStr.Length == 5)
+                {
+                    PieceType promo = moveStr[4] switch
+                    {
+                        'q' => PieceType.Queen,
+                        'r' => PieceType.Rook,
+                        'b' => PieceType.Bishop,
+                        'n' => PieceType.Knight,
+                        _ => PieceType.None
+                    };
+
+                    if (m.Promotion != promo)
+                        continue;
+                }
+                else if (m.IsPromotion)
+                {
+                    continue; // Promotion move requires promotion piece
+                }
+
+                move = m;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private int ParseSquare(string square)
+    {
+        if (square.Length != 2)
+            return -1;
+
+        int file = square[0] - 'a';
+        int rank = square[1] - '1';
+
+        if (file < 0 || file > 7 || rank < 0 || rank > 7)
+            return -1;
+
+        return rank * 8 + file;
+    }
+
+    private void DisplayBoard()
+    {
+        Console.WriteLine("\n  a b c d e f g h");
+        Console.WriteLine("  ---------------");
+
+        for (int rank = 7; rank >= 0; rank--)
+        {
+            Console.Write($"{rank + 1}|");
+            for (int file = 0; file < 8; file++)
+            {
+                int square = rank * 8 + file;
+                var (piece, color) = _board.GetPieceAt(square);
+
+                char pieceChar = piece switch
+                {
+                    PieceType.Pawn => 'p',
+                    PieceType.Knight => 'n',
+                    PieceType.Bishop => 'b',
+                    PieceType.Rook => 'r',
+                    PieceType.Queen => 'q',
+                    PieceType.King => 'k',
+                    _ => '.'
+                };
+
+                if (color == Color.White && pieceChar != '.')
+                    pieceChar = char.ToUpper(pieceChar);
+
+                Console.Write($"{pieceChar} ");
+            }
+            Console.WriteLine($"|{rank + 1}");
+        }
+
+        Console.WriteLine("  ---------------");
+        Console.WriteLine("  a b c d e f g h\n");
+        Console.WriteLine($"Side to move: {_board.SideToMove}");
+        Console.WriteLine($"Castling rights: {_board.CastlingRights}");
+        Console.WriteLine($"En passant: {(_board.EnPassantSquare >= 0 ? $"{(char)('a' + _board.EnPassantSquare % 8)}{_board.EnPassantSquare / 8 + 1}" : "-")}");
+        Console.WriteLine($"Halfmove clock: {_board.HalfmoveClock}");
+        Console.WriteLine($"Fullmove number: {_board.FullmoveNumber}");
+    }
+
+    private void Perft(int depth)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        long nodes = PerftRecursive(ref _board, depth);
+        sw.Stop();
+
+        Console.WriteLine($"Nodes: {nodes}");
+        Console.WriteLine($"Time: {sw.ElapsedMilliseconds} ms");
+        Console.WriteLine($"NPS: {(nodes * 1000) / Math.Max(sw.ElapsedMilliseconds, 1)}");
+    }
+
+    private long PerftRecursive(ref Board board, int depth)
+    {
+        if (depth == 0)
+            return 1;
+
+        MoveList moves = new MoveList();
+        MoveGenerator.GenerateMoves(ref board, ref moves);
+
+        if (depth == 1)
+            return moves.Count;
+
+        long nodes = 0;
+        for (int i = 0; i < moves.Count; i++)
+        {
+            Board newBoard = board;
+            newBoard.MakeMove(moves[i]);
+            nodes += PerftRecursive(ref newBoard, depth - 1);
+        }
+
+        return nodes;
+    }
+}

@@ -1,5 +1,4 @@
 ﻿namespace Chess;
-
 using System.Diagnostics;
 
 public static class Perft
@@ -139,84 +138,5 @@ public static class Perft
         Console.WriteLine($"Positions/second: {movesPerSecond:N0}");
         Console.WriteLine($"Average moves per position: {totalMoves / (double)iterations:F1}");
         Console.WriteLine($"Time per position: {sw.Elapsed.TotalMicroseconds / iterations:F2}μs");
-    }
-}
-
-public static class FenParser
-{
-    public static Board ParseFen(string fen)
-    {
-        var parts = fen.Split(' ');
-        var board = new Board();
-
-        // Parse piece placement
-        int rank = 7;
-        int file = 0;
-
-        foreach (char c in parts[0])
-        {
-            if (c == '/')
-            {
-                rank--;
-                file = 0;
-            }
-            else if (char.IsDigit(c))
-            {
-                file += c - '0';
-            }
-            else
-            {
-                int square = rank * 8 + file;
-                ulong bit = 1UL << square;
-
-                switch (c)
-                {
-                    case 'P': board.WhitePawns |= bit; break;
-                    case 'N': board.WhiteKnights |= bit; break;
-                    case 'B': board.WhiteBishops |= bit; break;
-                    case 'R': board.WhiteRooks |= bit; break;
-                    case 'Q': board.WhiteQueens |= bit; break;
-                    case 'K': board.WhiteKing |= bit; break;
-                    case 'p': board.BlackPawns |= bit; break;
-                    case 'n': board.BlackKnights |= bit; break;
-                    case 'b': board.BlackBishops |= bit; break;
-                    case 'r': board.BlackRooks |= bit; break;
-                    case 'q': board.BlackQueens |= bit; break;
-                    case 'k': board.BlackKing |= bit; break;
-                }
-                file++;
-            }
-        }
-
-        // Side to move
-        board.SideToMove = parts[1] == "w" ? Color.White : Color.Black;
-
-        // Castling rights
-        board.CastlingRights = CastlingRights.None;
-        if (parts[2].Contains('K')) board.CastlingRights |= CastlingRights.WhiteKingside;
-        if (parts[2].Contains('Q')) board.CastlingRights |= CastlingRights.WhiteQueenside;
-        if (parts[2].Contains('k')) board.CastlingRights |= CastlingRights.BlackKingside;
-        if (parts[2].Contains('q')) board.CastlingRights |= CastlingRights.BlackQueenside;
-
-        // En passant
-        if (parts[3] != "-")
-        {
-            int epFile = parts[3][0] - 'a';
-            int epRank = parts[3][1] - '1';
-            board.EnPassantSquare = epRank * 8 + epFile;
-        }
-        else
-        {
-            board.EnPassantSquare = -1;
-        }
-
-        // Halfmove clock
-        board.HalfmoveClock = int.Parse(parts[4]);
-
-        // Fullmove number
-        board.FullmoveNumber = int.Parse(parts[5]);
-
-        board.UpdateAggregateBitboards();
-        return board;
     }
 }

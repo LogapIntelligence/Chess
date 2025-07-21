@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -23,7 +24,7 @@ namespace Chess
             GC.Collect();
             GC.WaitForPendingFinalizers();
             GC.Collect();
-
+            BenchmarkParallelPerft();
             BenchmarkMoveGeneration();
             BenchmarkPerft();
             BenchmarkMakeUnmake();
@@ -88,10 +89,9 @@ namespace Chess
 
             var board = Board.StartingPosition();
 
-            for (int depth = 1; depth <= 7; depth++)
+            for (int depth = 1; depth <= 6; depth++)
             {
-                // Skip depth 7 if it would take too long
-                if (depth == 7)
+                if (depth == 6)
                 {
                     var testRun = Stopwatch.StartNew();
                     Perft.RunPerft(board, 5);
@@ -266,7 +266,7 @@ namespace Chess
             var sw = Stopwatch.StartNew();
 
             // Generate moves many times to check for allocations
-            const int iterations = 10_000_000;
+            const int iterations = 10_000_00;
             for (int i = 0; i < iterations; i++)
             {
                 var moves = new MoveList();
@@ -280,6 +280,50 @@ namespace Chess
             Console.WriteLine($"Memory allocated per generation: {memPerIteration:F2} bytes");
             Console.WriteLine($"GC collections: Gen0={GC.CollectionCount(0)}, Gen1={GC.CollectionCount(1)}, Gen2={GC.CollectionCount(2)}");
             Console.WriteLine();
+        }
+
+        private static void BenchmarkParallelPerft()
+        {
+            Console.WriteLine("Parallel Perft Benchmark:");
+            Console.WriteLine("------------------------");
+
+            var board = Board.StartingPosition();
+            int[] threadCounts = { 1, 2, 4, 8, Environment.ProcessorCount };
+
+            // Test depth 5 and 6
+            for (int depth = 5; depth <= 6; depth++)
+            {
+                Console.WriteLine($"\nPerft({depth}):");
+
+                // Single-threaded baseline
+                var sw = Stopwatch.StartNew();
+                long nodes = Perft.RunPerft(board, depth);
+                sw.Stop();
+                double singleThreadTime = sw.Elapsed.TotalSeconds;
+                double singleThreadNps = nodes / singleThreadTime;
+
+                Console.WriteLine($"  1 thread:  {nodes,15:N0} nodes in {sw.ElapsedMilliseconds,6}ms = {singleThreadNps,12:N0} NPS");
+
+                // Multi-threaded tests
+                foreach (int threads in threadCounts.Skip(1))
+                {
+                    sw.Restart();
+                    long parallelNodes = ParallelPerft.RunPerftParallel(board, depth, threads);
+                    sw.Stop();
+
+                    double parallelTime = sw.Elapsed.TotalSeconds;
+                    double parallelNps = parallelNodes / parallelTime;
+                    double speedup = singleThreadTime / parallelTime;
+                    double efficiency = speedup / threads * 100;
+
+                    Console.WriteLine($"  {threads} threads: {parallelNodes,15:N0} nodes in {sw.ElapsedMilliseconds,6}ms = {parallelNps,12:N0} NPS (speedup: {speedup:F2}x, efficiency: {efficiency:F0}%)");
+
+                    if (parallelNodes != nodes)
+                    {
+                        Console.WriteLine($"  ERROR: Node count mismatch! Expected {nodes}, got {parallelNodes}");
+                    }
+                }
+            }
         }
 
         private static void BenchmarkDifferentPositions()
@@ -310,6 +354,43 @@ namespace Chess
                 double nps = nodes / sw.Elapsed.TotalSeconds;
                 Console.WriteLine($"{name,-15} Perft(5): {nodes,10:N0} nodes, {nps,12:N0} NPS");
             }
+        }
+    }
+
+    public static class ParallelPerft
+    {
+        public static long RunPerftParallel(Board board, int depth, int threadCount = 0)
+        {
+            if (threadCount == 0)
+                threadCount = Environment.ProcessorCount;
+
+            if (depth <= 2) // Too shallow for parallelization
+                return Perft.RunPerft(board, depth);
+
+            var moves = new MoveList();
+            MoveGenerator.GenerateMoves(ref board, ref moves);
+
+            if (moves.Count == 0) return 0;
+
+            long totalNodes = 0;
+            var partitioner = Partitioner.Create(0, moves.Count);
+
+            Parallel.ForEach(partitioner, new ParallelOptions { MaxDegreeOfParallelism = threadCount }, range =>
+            {
+                long localNodes = 0;
+
+                for (int i = range.Item1; i < range.Item2; i++)
+                {
+                    var localBoard = board; // Struct copy - thread safe
+                    localBoard.MakeMove(moves[i]);
+                    localNodes += Perft.RunPerft(localBoard, depth - 1);
+                }
+
+                // Thread-safe addition
+                System.Threading.Interlocked.Add(ref totalNodes, localNodes);
+            });
+
+            return totalNodes;
         }
     }
 }

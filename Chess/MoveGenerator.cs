@@ -152,7 +152,7 @@ public static class MoveGenerator
         ulong empty = ~occupancy;
 
         // Single push
-        ulong singlePush = (pawns << 8) & empty;
+        ulong singlePush = pawns << 8 & empty;
         ulong singlePushTargets = singlePush & ~BitboardConstants.Rank8;
         while (singlePushTargets != 0)
         {
@@ -162,7 +162,7 @@ public static class MoveGenerator
         }
 
         // Double push
-        ulong doublePush = ((singlePush & BitboardConstants.Rank3) << 8) & empty;
+        ulong doublePush = (singlePush & BitboardConstants.Rank3) << 8 & empty;
         while (doublePush != 0)
         {
             int to = BitboardConstants.BitScanForward(doublePush);
@@ -171,7 +171,7 @@ public static class MoveGenerator
         }
 
         // Promotions
-        ulong promotions = (pawns << 8) & empty & BitboardConstants.Rank8;
+        ulong promotions = pawns << 8 & empty & BitboardConstants.Rank8;
         while (promotions != 0)
         {
             int to = BitboardConstants.BitScanForward(promotions);
@@ -184,8 +184,8 @@ public static class MoveGenerator
         }
 
         // Captures
-        ulong leftCaptures = ((pawns & ~BitboardConstants.FileA) << 7) & enemies;
-        ulong rightCaptures = ((pawns & ~BitboardConstants.FileH) << 9) & enemies;
+        ulong leftCaptures = (pawns & ~BitboardConstants.FileA) << 7 & enemies;
+        ulong rightCaptures = (pawns & ~BitboardConstants.FileH) << 9 & enemies;
 
         // Normal captures
         ulong leftNormal = leftCaptures & ~BitboardConstants.Rank8;
@@ -251,7 +251,7 @@ public static class MoveGenerator
         ulong empty = ~occupancy;
 
         // Single push
-        ulong singlePush = (pawns >> 8) & empty;
+        ulong singlePush = pawns >> 8 & empty;
         ulong singlePushTargets = singlePush & ~BitboardConstants.Rank1;
         while (singlePushTargets != 0)
         {
@@ -261,7 +261,7 @@ public static class MoveGenerator
         }
 
         // Double push
-        ulong doublePush = ((singlePush & BitboardConstants.Rank6) >> 8) & empty;
+        ulong doublePush = (singlePush & BitboardConstants.Rank6) >> 8 & empty;
         while (doublePush != 0)
         {
             int to = BitboardConstants.BitScanForward(doublePush);
@@ -270,7 +270,7 @@ public static class MoveGenerator
         }
 
         // Promotions
-        ulong promotions = (pawns >> 8) & empty & BitboardConstants.Rank1;
+        ulong promotions = pawns >> 8 & empty & BitboardConstants.Rank1;
         while (promotions != 0)
         {
             int to = BitboardConstants.BitScanForward(promotions);
@@ -283,8 +283,8 @@ public static class MoveGenerator
         }
 
         // Captures
-        ulong leftCaptures = ((pawns & ~BitboardConstants.FileA) >> 9) & enemies;
-        ulong rightCaptures = ((pawns & ~BitboardConstants.FileH) >> 7) & enemies;
+        ulong leftCaptures = (pawns & ~BitboardConstants.FileA) >> 9 & enemies;
+        ulong rightCaptures = (pawns & ~BitboardConstants.FileH) >> 7 & enemies;
 
         // Normal captures
         ulong leftNormal = leftCaptures & ~BitboardConstants.Rank1;
@@ -350,7 +350,7 @@ public static class MoveGenerator
             int to = BitboardConstants.BitScanForward(attacks);
             attacks = BitboardConstants.ClearBit(attacks, to);
 
-            MoveFlags flags = ((1UL << to) & enemies) != 0 ? MoveFlags.Capture : MoveFlags.None;
+            MoveFlags flags = (1UL << to & enemies) != 0 ? MoveFlags.Capture : MoveFlags.None;
             moves.Add(new Move(from, to, flags));
         }
     }

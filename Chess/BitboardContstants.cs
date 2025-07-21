@@ -125,9 +125,15 @@ public static class BitboardConstants
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int BitScanReverse(ulong bitboard)
+    {
+        return 63 - System.Numerics.BitOperations.LeadingZeroCount(bitboard);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ulong SetBit(ulong bitboard, int square)
     {
-        return bitboard | (1UL << square);
+        return bitboard | 1UL << square;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -139,6 +145,6 @@ public static class BitboardConstants
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool GetBit(ulong bitboard, int square)
     {
-        return (bitboard & (1UL << square)) != 0;
+        return (bitboard & 1UL << square) != 0;
     }
 }

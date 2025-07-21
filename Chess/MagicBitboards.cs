@@ -6,8 +6,8 @@ using System.Runtime.InteropServices;
 public static class MagicBitboards
 {
     // Magic numbers found through brute force search
-    private static readonly ulong[] RookMagics = new ulong[64]
-    {
+    private static readonly ulong[] RookMagics =
+    [
         0x8a80104000800020UL, 0x140002000100040UL, 0x2801880a0017001UL, 0x100081001000420UL,
         0x200020010080420UL, 0x3001c0002010008UL, 0x8480008002000100UL, 0x2080088004402900UL,
         0x800098204000UL, 0x2024401000200040UL, 0x100802000801000UL, 0x120800800801000UL,
@@ -24,10 +24,10 @@ public static class MagicBitboards
         0x1001004080100UL, 0x20c020080040080UL, 0x2935610830022400UL, 0x44440041009200UL,
         0x280001040802101UL, 0x2100190040002085UL, 0x80c0084100102001UL, 0x4024081001000421UL,
         0x20030a0244872UL, 0x12001008414402UL, 0x2006104900a0804UL, 0x1004081002402UL
-    };
+    ];
 
-    private static readonly ulong[] BishopMagics = new ulong[64]
-    {
+    private static readonly ulong[] BishopMagics =
+    [
         0x40040844404084UL, 0x2004208a004208UL, 0x10190041080202UL, 0x108060845042010UL,
         0x581104180800210UL, 0x2112080446200010UL, 0x1080820820060210UL, 0x3c0808410220200UL,
         0x4050404440404UL, 0x21001420088UL, 0x24d0080801082102UL, 0x1020a0a020400UL,
@@ -44,7 +44,7 @@ public static class MagicBitboards
         0x802241102020002UL, 0x20906061210001UL, 0x5a84841004010310UL, 0x4010801011c04UL,
         0xa010109502200UL, 0x4a02012000UL, 0x500201010098b028UL, 0x8040002811040900UL,
         0x28000010020204UL, 0x6000020202d0240UL, 0x8918844842082200UL, 0x4010011029020020UL
-    };
+    ];
 
     // Shift amounts for each square
     private static readonly int[] RookShifts = new int[64];
@@ -84,19 +84,19 @@ public static class MagicBitboards
 
         // North
         for (int r = rank + 1; r < 7; r++)
-            mask |= 1UL << (r * 8 + file);
+            mask |= 1UL << r * 8 + file;
 
         // South
         for (int r = rank - 1; r > 0; r--)
-            mask |= 1UL << (r * 8 + file);
+            mask |= 1UL << r * 8 + file;
 
         // East
         for (int f = file + 1; f < 7; f++)
-            mask |= 1UL << (rank * 8 + f);
+            mask |= 1UL << rank * 8 + f;
 
         // West
         for (int f = file - 1; f > 0; f--)
-            mask |= 1UL << (rank * 8 + f);
+            mask |= 1UL << rank * 8 + f;
 
         return mask;
     }
@@ -109,19 +109,19 @@ public static class MagicBitboards
 
         // Northeast
         for (int r = rank + 1, f = file + 1; r < 7 && f < 7; r++, f++)
-            mask |= 1UL << (r * 8 + f);
+            mask |= 1UL << r * 8 + f;
 
         // Northwest
         for (int r = rank + 1, f = file - 1; r < 7 && f > 0; r++, f--)
-            mask |= 1UL << (r * 8 + f);
+            mask |= 1UL << r * 8 + f;
 
         // Southeast
         for (int r = rank - 1, f = file + 1; r > 0 && f < 7; r--, f++)
-            mask |= 1UL << (r * 8 + f);
+            mask |= 1UL << r * 8 + f;
 
         // Southwest
         for (int r = rank - 1, f = file - 1; r > 0 && f > 0; r--, f--)
-            mask |= 1UL << (r * 8 + f);
+            mask |= 1UL << r * 8 + f;
 
         return mask;
     }
@@ -137,17 +137,17 @@ public static class MagicBitboards
             BishopAttacks[sq] = new ulong[1 << bishopBits];
 
             // Generate all possible occupancy variations
-            for (int i = 0; i < (1 << rookBits); i++)
+            for (int i = 0; i < 1 << rookBits; i++)
             {
                 ulong occupancy = GenerateOccupancy(i, rookBits, RookMasks[sq]);
-                int index = (int)((occupancy * RookMagics[sq]) >> RookShifts[sq]);
+                int index = (int)(occupancy * RookMagics[sq] >> RookShifts[sq]);
                 RookAttacks[sq][index] = GenerateRookAttacks(sq, occupancy);
             }
 
-            for (int i = 0; i < (1 << bishopBits); i++)
+            for (int i = 0; i < 1 << bishopBits; i++)
             {
                 ulong occupancy = GenerateOccupancy(i, bishopBits, BishopMasks[sq]);
-                int index = (int)((occupancy * BishopMagics[sq]) >> BishopShifts[sq]);
+                int index = (int)(occupancy * BishopMagics[sq] >> BishopShifts[sq]);
                 BishopAttacks[sq][index] = GenerateBishopAttacks(sq, occupancy);
             }
         }
@@ -160,7 +160,7 @@ public static class MagicBitboards
         {
             int sq = BitboardConstants.BitScanForward(mask);
             mask = BitboardConstants.ClearBit(mask, sq);
-            if ((index & (1 << i)) != 0)
+            if ((index & 1 << i) != 0)
                 occupancy |= 1UL << sq;
         }
         return occupancy;
@@ -175,29 +175,29 @@ public static class MagicBitboards
         // North
         for (int r = rank + 1; r < 8; r++)
         {
-            attacks |= 1UL << (r * 8 + file);
-            if ((blockers & (1UL << (r * 8 + file))) != 0) break;
+            attacks |= 1UL << r * 8 + file;
+            if ((blockers & 1UL << r * 8 + file) != 0) break;
         }
 
         // South
         for (int r = rank - 1; r >= 0; r--)
         {
-            attacks |= 1UL << (r * 8 + file);
-            if ((blockers & (1UL << (r * 8 + file))) != 0) break;
+            attacks |= 1UL << r * 8 + file;
+            if ((blockers & 1UL << r * 8 + file) != 0) break;
         }
 
         // East
         for (int f = file + 1; f < 8; f++)
         {
-            attacks |= 1UL << (rank * 8 + f);
-            if ((blockers & (1UL << (rank * 8 + f))) != 0) break;
+            attacks |= 1UL << rank * 8 + f;
+            if ((blockers & 1UL << rank * 8 + f) != 0) break;
         }
 
         // West
         for (int f = file - 1; f >= 0; f--)
         {
-            attacks |= 1UL << (rank * 8 + f);
-            if ((blockers & (1UL << (rank * 8 + f))) != 0) break;
+            attacks |= 1UL << rank * 8 + f;
+            if ((blockers & 1UL << rank * 8 + f) != 0) break;
         }
 
         return attacks;
@@ -212,29 +212,29 @@ public static class MagicBitboards
         // Northeast
         for (int r = rank + 1, f = file + 1; r < 8 && f < 8; r++, f++)
         {
-            attacks |= 1UL << (r * 8 + f);
-            if ((blockers & (1UL << (r * 8 + f))) != 0) break;
+            attacks |= 1UL << r * 8 + f;
+            if ((blockers & 1UL << r * 8 + f) != 0) break;
         }
 
         // Northwest
         for (int r = rank + 1, f = file - 1; r < 8 && f >= 0; r++, f--)
         {
-            attacks |= 1UL << (r * 8 + f);
-            if ((blockers & (1UL << (r * 8 + f))) != 0) break;
+            attacks |= 1UL << r * 8 + f;
+            if ((blockers & 1UL << r * 8 + f) != 0) break;
         }
 
         // Southeast
         for (int r = rank - 1, f = file + 1; r >= 0 && f < 8; r--, f++)
         {
-            attacks |= 1UL << (r * 8 + f);
-            if ((blockers & (1UL << (r * 8 + f))) != 0) break;
+            attacks |= 1UL << r * 8 + f;
+            if ((blockers & 1UL << r * 8 + f) != 0) break;
         }
 
         // Southwest
         for (int r = rank - 1, f = file - 1; r >= 0 && f >= 0; r--, f--)
         {
-            attacks |= 1UL << (r * 8 + f);
-            if ((blockers & (1UL << (r * 8 + f))) != 0) break;
+            attacks |= 1UL << r * 8 + f;
+            if ((blockers & 1UL << r * 8 + f) != 0) break;
         }
 
         return attacks;
@@ -244,7 +244,7 @@ public static class MagicBitboards
     public static ulong GetRookAttacks(int square, ulong occupancy)
     {
         occupancy &= RookMasks[square];
-        int index = (int)((occupancy * RookMagics[square]) >> RookShifts[square]);
+        int index = (int)(occupancy * RookMagics[square] >> RookShifts[square]);
         return RookAttacks[square][index];
     }
 
@@ -252,7 +252,7 @@ public static class MagicBitboards
     public static ulong GetBishopAttacks(int square, ulong occupancy)
     {
         occupancy &= BishopMasks[square];
-        int index = (int)((occupancy * BishopMagics[square]) >> BishopShifts[square]);
+        int index = (int)(occupancy * BishopMagics[square] >> BishopShifts[square]);
         return BishopAttacks[square][index];
     }
 

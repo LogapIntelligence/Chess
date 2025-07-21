@@ -22,7 +22,7 @@ public readonly struct Move : IEquatable<Move>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Move(int from, int to, MoveFlags flags = MoveFlags.None, PieceType promotion = PieceType.None)
     {
-        _data = (uint)from | ((uint)to << 6) | ((uint)promotion << 12) | (uint)flags;
+        _data = (uint)from | (uint)to << 6 | (uint)promotion << 12 | (uint)flags;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -32,8 +32,8 @@ public readonly struct Move : IEquatable<Move>
     }
 
     public int From => (int)(_data & 0x3F);
-    public int To => (int)((_data >> 6) & 0x3F);
-    public PieceType Promotion => (PieceType)((_data >> 12) & 0x7);
+    public int To => (int)(_data >> 6 & 0x3F);
+    public PieceType Promotion => (PieceType)(_data >> 12 & 0x7);
     public bool IsCapture => (_data & (uint)MoveFlags.Capture) != 0;
     public bool IsDoublePush => (_data & (uint)MoveFlags.DoublePush) != 0;
     public bool IsEnPassant => (_data & (uint)MoveFlags.EnPassant) != 0;
