@@ -11,13 +11,13 @@ public class Uci
     private Search _search;
     private PositionHistory _positionHistory;
     private CancellationTokenSource? _searchCts;
+    private Task? _searchTask;
     private bool _ponder = false;
     private int _multiPv = 1;
     private bool _debug = false;
 
-    private const string EngineName = "ChessEngine1";
-    private const string Author = "Your Name";
-    private const int MateScore = 100000;
+    private const string EngineName = "Chess7";
+    private const string Author = "Angelo Wolff";
 
     public Uci()
     {
@@ -28,6 +28,9 @@ public class Uci
 
     private void HandleNewGame()
     {
+        // Cancel any ongoing search
+        HandleStop();
+
         _board = Board.StartingPosition();
         _search.ClearHash();
         _positionHistory = new PositionHistory(_board);
@@ -57,7 +60,7 @@ public class Uci
                             _debug = tokens[1] == "on";
                         break;
                     case "isready":
-                        SendOutput("readyok");
+                        HandleIsReady();
                         break;
                     case "ucinewgame":
                         HandleNewGame();
@@ -79,7 +82,7 @@ public class Uci
                         DisplayBoard();
                         break;
                     case "eval":
-                        SendOutput($"Evaluation: {Evaluation.Evaluate(ref _board)}");
+                        DisplayEval();
                         break;
                     case "perft":
                         if (tokens.Length > 1 && int.TryParse(tokens[1], out int depth))
@@ -87,6 +90,9 @@ public class Uci
                         break;
                     case "setoption":
                         HandleSetOption(tokens);
+                        break;
+                    case "ponderhit":
+                        HandlePonderHit();
                         break;
                     default:
                         if (_debug)
@@ -120,8 +126,23 @@ public class Uci
         SendOutput("uciok");
     }
 
+    private void HandleIsReady()
+    {
+        // Make sure any ongoing search is properly handled
+        WaitForSearchToFinish();
+        SendOutput("readyok");
+    }
+
     private void HandleSetOption(string[] tokens)
     {
+        // Don't allow option changes during search
+        if (_searchTask != null && !_searchTask.IsCompleted)
+        {
+            if (_debug)
+                SendOutput("info string cannot change options during search");
+            return;
+        }
+
         if (tokens.Length < 5 || tokens[1] != "name" || tokens[3] != "value")
             return;
 
@@ -131,9 +152,8 @@ public class Uci
         switch (optionName)
         {
             case "hash":
-                if (int.TryParse(value, out int hashSize))
+                if (int.TryParse(value, out int hashSize) && hashSize > 0)
                 {
-                    // Recreate search with new hash size
                     _search = new Search(hashSize);
                     if (_debug)
                         SendOutput($"info string hash size set to {hashSize} MB");
@@ -143,8 +163,8 @@ public class Uci
                 _ponder = value.ToLower() == "true";
                 break;
             case "multipv":
-                if (int.TryParse(value, out int multiPv))
-                    _multiPv = multiPv;
+                if (int.TryParse(value, out int multiPv) && multiPv > 0)
+                    _multiPv = Math.Min(multiPv, 500);
                 break;
             case "debug":
                 _debug = value.ToLower() == "true";
@@ -181,7 +201,8 @@ public class Uci
                 }
                 catch (Exception ex)
                 {
-                    SendOutput($"info string error parsing FEN: {ex.Message}");
+                    if (_debug)
+                        SendOutput($"info string error parsing FEN: {ex.Message}");
                     return;
                 }
             }
@@ -196,7 +217,8 @@ public class Uci
             {
                 if (!TryParseMove(tokens[i], out Move move))
                 {
-                    SendOutput($"info string invalid move: {tokens[i]}");
+                    if (_debug)
+                        SendOutput($"info string invalid move: {tokens[i]}");
                     break;
                 }
                 _board.MakeMove(move);
@@ -207,101 +229,170 @@ public class Uci
 
     private void HandleGo(string[] tokens)
     {
-        // Stop any ongoing search
+        // Stop any ongoing search first
         HandleStop();
 
-        int depth = int.MaxValue;
-        long timeMs = 10000; // Default 10 seconds
+        long timeMs = long.MaxValue;
+        int depth = Search.MaxDepth;
+        bool isInfinite = false;
+        bool isPonder = false;
+
         long wtime = 0, btime = 0, winc = 0, binc = 0;
-        int movestogo = 40;
-        bool infinite = false;
+        int movestogo = 40; // Default moves to go
 
         // Parse go parameters
         for (int i = 1; i < tokens.Length; i++)
         {
             switch (tokens[i])
             {
+                case "infinite":
+                    isInfinite = true;
+                    timeMs = long.MaxValue;
+                    break;
                 case "depth":
                     if (i + 1 < tokens.Length && int.TryParse(tokens[i + 1], out int d))
-                        depth = d;
-                    i++;
+                    {
+                        depth = Math.Min(d, Search.MaxDepth);
+                        i++;
+                    }
                     break;
                 case "movetime":
                     if (i + 1 < tokens.Length && long.TryParse(tokens[i + 1], out long mt))
+                    {
                         timeMs = mt;
-                    i++;
+                        i++;
+                    }
                     break;
                 case "wtime":
                     if (i + 1 < tokens.Length && long.TryParse(tokens[i + 1], out wtime))
+                    {
                         i++;
+                    }
                     break;
                 case "btime":
                     if (i + 1 < tokens.Length && long.TryParse(tokens[i + 1], out btime))
+                    {
                         i++;
+                    }
                     break;
                 case "winc":
                     if (i + 1 < tokens.Length && long.TryParse(tokens[i + 1], out winc))
+                    {
                         i++;
+                    }
                     break;
                 case "binc":
                     if (i + 1 < tokens.Length && long.TryParse(tokens[i + 1], out binc))
+                    {
                         i++;
+                    }
                     break;
                 case "movestogo":
                     if (i + 1 < tokens.Length && int.TryParse(tokens[i + 1], out movestogo))
+                    {
                         i++;
-                    break;
-                case "infinite":
-                    infinite = true;
-                    timeMs = long.MaxValue;
+                    }
                     break;
                 case "ponder":
-                    // Handle ponder mode if needed
+                    isPonder = true;
                     break;
             }
         }
 
-        // Calculate time for this move
-        if (!infinite && (wtime > 0 || btime > 0))
+        // Calculate time allocation if not infinite or fixed time
+        if (!isInfinite && timeMs == long.MaxValue && (wtime > 0 || btime > 0))
         {
             long timeLeft = _board.SideToMove == Color.White ? wtime : btime;
             long increment = _board.SideToMove == Color.White ? winc : binc;
 
             // Simple time management
-            timeMs = Math.Min(timeLeft / movestogo + increment / 2, timeLeft / 2);
-            timeMs = Math.Max(timeMs, 1); // At least 1ms
+            if (movestogo > 0)
+            {
+                timeMs = timeLeft / movestogo;
+                if (increment > 0)
+                    timeMs += increment * 3 / 4;
+            }
+            else
+            {
+                // Sudden death - use a fraction of remaining time
+                timeMs = timeLeft / 20;
+            }
+
+            // Safety margin - keep some time in reserve
+            if (timeLeft > 1000)
+                timeMs = Math.Min(timeMs, timeLeft - 50);
+            else if (timeLeft > 100)
+                timeMs = Math.Min(timeMs, timeLeft - 10);
         }
 
         if (_debug)
-            SendOutput($"info string search depth={depth} time={timeMs}ms");
+        {
+            SendOutput($"info string starting search depth={depth} time={timeMs}ms " +
+                      $"infinite={isInfinite} ponder={isPonder}");
+        }
 
-        // Start search in background
+        // Start the search asynchronously
+        StartSearch(_board.Clone(), timeMs, depth);
+    }
+
+    private void StartSearch(Board board, long timeMs, int depth)
+    {
         _searchCts = new CancellationTokenSource();
-        var boardCopy = _board; // Struct copy
-        Task.Run(() =>
+
+        _searchTask = Task.Run(() =>
         {
             try
             {
-                Move bestMove = _search.Think(ref boardCopy, timeMs, depth);
-                if (!_searchCts.Token.IsCancellationRequested)
-                {
-                    SendOutput($"bestmove {bestMove}");
-                }
+                // The search will handle sending info and bestmove
+                _search.Think(ref board, timeMs, depth);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when search is stopped
+                // Send bestmove if search didn't
+                SendOutput("bestmove 0000");
             }
             catch (Exception ex)
             {
-                SendOutput($"info string error in search: {ex.Message}");
-                SendOutput("bestmove 0000"); // Send null move on error
+                if (_debug)
+                    SendOutput($"info string error in search: {ex.Message}");
+                SendOutput("bestmove 0000");
             }
         }, _searchCts.Token);
     }
 
     private void HandleStop()
     {
-        _search.Stop();
+        if (_search != null)
+            _search.Stop();
+
         _searchCts?.Cancel();
-        _searchCts?.Dispose();
-        _searchCts = null;
+
+        // Don't wait here - let the search finish sending bestmove
+        // The search task will handle cleanup
+    }
+
+    private void HandlePonderHit()
+    {
+        // For now, just convert ponder to normal search
+        _ponder = false;
+    }
+
+    private void WaitForSearchToFinish()
+    {
+        try
+        {
+            _searchTask?.Wait(1000); // Wait up to 1 second
+        }
+        catch (AggregateException)
+        {
+            // Task was cancelled, which is expected
+        }
+        catch (OperationCanceledException)
+        {
+            // Task was cancelled, which is expected
+        }
+        _searchTask = null;
     }
 
     private bool TryParseMove(string moveStr, out Move move)
@@ -411,6 +502,12 @@ public class Uci
         output.AppendLine($"Fullmove number: {_board.FullmoveNumber}");
 
         SendOutput(output.ToString());
+    }
+
+    private void DisplayEval()
+    {
+        int eval = Evaluation.Evaluate(ref _board);
+        SendOutput($"info string static evaluation: {eval} cp");
     }
 
     private void Perft(int depth)

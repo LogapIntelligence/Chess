@@ -69,6 +69,11 @@ public struct Board
         AllPieces = WhitePieces | BlackPieces;
     }
 
+    public readonly Board Clone()
+    {
+        return this; // This works because structs are value types
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly ulong GetPieceBitboard(PieceType piece, Color color)
     {
