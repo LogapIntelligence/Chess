@@ -153,7 +153,27 @@ public struct Board
 
         return (PieceType.None, Color.White);
     }
-
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly bool HasNonPawnMaterial()
+    {
+        if (SideToMove == Color.White)
+        {
+            return WhiteKnights != 0 || WhiteBishops != 0 ||
+                   WhiteRooks != 0 || WhiteQueens != 0;
+        }
+        else
+        {
+            return BlackKnights != 0 || BlackBishops != 0 ||
+                   BlackRooks != 0 || BlackQueens != 0;
+        }
+    }
+    private int GetNullMoveReduction(int depth)
+    {
+        // More aggressive reduction at higher depths
+        if (depth >= 8) return 4;
+        if (depth >= 5) return 3;
+        return 2;
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly bool IsSquareAttacked(int square, Color byColor)

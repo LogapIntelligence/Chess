@@ -16,7 +16,7 @@ public class Uci
     private int _multiPv = 1;
     private bool _debug = false;
 
-    private const string EngineName = "Chess7";
+    private const string EngineName = "Chess12";
     private const string Author = "Angelo Wolff";
 
     public Uci()

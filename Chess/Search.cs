@@ -225,6 +225,44 @@ public class Search
         if (ttEntry.Hash == hash)
             ttMove = ttEntry.Move;
 
+        // Null move pruning
+        const int NullMoveReduction = 3;
+
+        if (!isPvNode &&
+            !board.IsInCheck() &&
+            depth >= NullMoveReduction + 1 &&
+            ply > 0 &&
+            board.HasNonPawnMaterial())
+        {
+            // Make null move (just switch sides)
+            Board nullBoard = board;
+            nullBoard.SideToMove = nullBoard.SideToMove == Color.White ? Color.Black : Color.White;
+            nullBoard.EnPassantSquare = -1; // Clear en passant
+            nullBoard.HalfmoveClock++;
+
+            // Search with reduced depth
+            int nullScore = -AlphaBeta(ref nullBoard, depth - NullMoveReduction - 1, -beta, -beta + 1, ply + 1, false);
+
+            if (_stop)
+                return 0;
+
+            // If null move causes a beta cutoff, we can prune
+            if (nullScore >= beta)
+            {
+                // Verification search for high depths to avoid zugzwang
+                if (depth > 6)
+                {
+                    int verifyScore = AlphaBeta(ref board, depth - NullMoveReduction, alpha, beta, ply, false);
+                    if (verifyScore >= beta)
+                        return beta;
+                }
+                else
+                {
+                    return beta;
+                }
+            }
+        }
+
         // Leaf node - return evaluation
         if (depth <= 0)
             return Quiescence(ref board, alpha, beta, ply);
