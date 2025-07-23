@@ -142,13 +142,48 @@ namespace Database.Services
                 int consecutiveFailures = 0;
                 const int maxConsecutiveFailures = 3;
                 const int maxMoves = 300; // Prevent infinite games
+                bool gameEnded = false;
+                string gameResult = "*";
 
-                while (!chessService.IsGameOver && moveNumber < maxMoves && !cancellationToken.IsCancellationRequested)
+                while (!gameEnded && moveNumber < maxMoves && !cancellationToken.IsCancellationRequested)
                 {
                     var fen = chessService.GetFen();
 
                     // Get best move from engine
                     var analysis = await _engineInstance.AnalyzePositionAsync(fen, (int)_batch.Depth);
+
+                    // Check if the position is checkmate based on evaluation
+                    // Mate evaluations are typically 10000 - moves_to_mate
+                    if (Math.Abs(analysis.Evaluation) >= 9990)
+                    {
+                        // Store the final position
+                        moves.Add(new ChessMove
+                        {
+                            MoveNumber = moveNumber + 1,
+                            Fen = fen,
+                            Evaluation = analysis.Evaluation,
+                            ZobristHash = ComputeZobristHash(fen)
+                        });
+
+                        // Determine winner based on evaluation and whose turn it is
+                        var fenParts = fen.Split(' ');
+                        bool isWhiteToMove = fenParts.Length > 1 && fenParts[1] == "w";
+
+                        if (analysis.Evaluation > 9990)
+                        {
+                            // Positive mate score means the side to move has a winning position
+                            gameResult = isWhiteToMove ? "1-0" : "0-1";
+                        }
+                        else
+                        {
+                            // Negative mate score means the side to move is being mated
+                            gameResult = isWhiteToMove ? "0-1" : "1-0";
+                        }
+
+                        gameEnded = true;
+                        _logger.LogInformation($"Game ended in checkmate: {gameResult} after {moveNumber} moves");
+                        break;
+                    }
 
                     if (string.IsNullOrEmpty(analysis.BestMove))
                     {
@@ -157,6 +192,8 @@ namespace Database.Services
                         if (consecutiveFailures >= maxConsecutiveFailures)
                         {
                             _logger.LogError($"Too many consecutive failures, ending game");
+                            gameResult = "1/2-1/2"; // Assume draw if engine fails
+                            gameEnded = true;
                             break;
                         }
                         continue;
@@ -170,6 +207,8 @@ namespace Database.Services
                         if (consecutiveFailures >= maxConsecutiveFailures)
                         {
                             _logger.LogError($"Too many consecutive failures, ending game");
+                            gameResult = "1/2-1/2"; // Assume draw if moves fail
+                            gameEnded = true;
                             break;
                         }
                         continue;
@@ -184,10 +223,28 @@ namespace Database.Services
                         MoveNumber = moveNumber,
                         Fen = chessService.GetFen(),
                         Evaluation = analysis.Evaluation,
-                        ZobristHash = ComputeZobristHash(chessService.GetFen()) // You'll need to implement this
+                        ZobristHash = ComputeZobristHash(chessService.GetFen())
                     });
 
-                    // Check for draw by repetition or 50-move rule (handled by ChessService)
+                    // Check if ChessService detected a draw
+                    if (chessService.IsGameOver)
+                    {
+                        gameResult = chessService.GameResult;
+                        gameEnded = true;
+                        _logger.LogInformation($"Game ended by rule: {gameResult} after {moveNumber} moves");
+                        break;
+                    }
+
+                    // Additional draw detection based on move count
+                    if (moveNumber >= maxMoves)
+                    {
+                        gameResult = "1/2-1/2";
+                        gameEnded = true;
+                        _logger.LogInformation($"Game ended by max moves limit: {moveNumber} moves");
+                        break;
+                    }
+
+                    // Log progress
                     if (moveNumber % 50 == 0)
                     {
                         _logger.LogDebug($"Game in progress: {moveNumber} moves");
@@ -198,7 +255,7 @@ namespace Database.Services
                 {
                     GeneratedAt = DateTime.UtcNow,
                     MoveCount = moveNumber,
-                    Result = chessService.GameResult ?? "1/2-1/2",
+                    Result = gameResult,
                     Moves = moves
                 };
 
