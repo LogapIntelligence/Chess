@@ -17,20 +17,86 @@ namespace Database.Services
         private int _halfMoveClock;
         private int _fullMoveNumber;
 
+        public bool IsGameOver { get; private set; }
+        public string GameResult { get; private set; }
+
         public ChessService()
         {
-
+            // Initialize with empty board by default
+            _board = new Piece[64];
         }
 
-        public void NewGame()
+        public void LoadStartingPosition()
         {
-            string fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-            LoadFen(fen);
+            LoadFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+        }
+
+        public void LoadFen(string fen)
+        {
+            _board = new Piece[64];
+            var parts = fen.Split(' ');
+
+            if (parts.Length < 4)
+                throw new ArgumentException("Invalid FEN string");
+
+            // Reset game state
+            IsGameOver = false;
+            GameResult = "*";
+
+            // Parse piece placement
+            int rank = 7, file = 0;
+            foreach (char c in parts[0])
+            {
+                if (c == '/')
+                {
+                    rank--;
+                    file = 0;
+                }
+                else if (char.IsDigit(c))
+                {
+                    int emptySquares = c - '0';
+                    for (int i = 0; i < emptySquares; i++)
+                    {
+                        _board[rank * 8 + file] = new Piece(PieceType.None, Player.White);
+                        file++;
+                    }
+                }
+                else
+                {
+                    _board[rank * 8 + file] = GetPieceFromChar(c);
+                    file++;
+                }
+            }
+
+            // Active color
+            Turn = (parts[1] == "w") ? Player.White : Player.Black;
+
+            // Castling availability
+            _whiteKingSideCastle = parts[2].Contains('K');
+            _whiteQueenSideCastle = parts[2].Contains('Q');
+            _blackKingSideCastle = parts[2].Contains('k');
+            _blackQueenSideCastle = parts[2].Contains('q');
+
+            // En passant target square
+            if (parts[3] != "-")
+            {
+                _enPassantTargetSquare = AlgebraicToSquare(parts[3]);
+            }
+            else
+            {
+                _enPassantTargetSquare = null;
+            }
+
+            // Halfmove clock and fullmove number
+            _halfMoveClock = parts.Length > 4 ? int.Parse(parts[4]) : 0;
+            _fullMoveNumber = parts.Length > 5 ? int.Parse(parts[5]) : 1;
         }
 
         public string GetFen()
         {
             var sb = new StringBuilder();
+
+            // Piece placement
             for (int rank = 7; rank >= 0; rank--)
             {
                 int emptySquares = 0;
@@ -62,8 +128,10 @@ namespace Database.Services
                 }
             }
 
+            // Active color
             sb.Append(Turn == Player.White ? " w " : " b ");
 
+            // Castling availability
             string castling = "";
             if (_whiteKingSideCastle) castling += 'K';
             if (_whiteQueenSideCastle) castling += 'Q';
@@ -71,389 +139,199 @@ namespace Database.Services
             if (_blackQueenSideCastle) castling += 'q';
             sb.Append(string.IsNullOrEmpty(castling) ? "-" : castling);
 
+            // En passant
             sb.Append(' ');
-
             if (_enPassantTargetSquare.HasValue)
             {
-                sb.Append(SquareToString(_enPassantTargetSquare.Value));
+                sb.Append(SquareToAlgebraic(_enPassantTargetSquare.Value));
             }
             else
             {
                 sb.Append('-');
             }
 
+            // Halfmove clock and fullmove number
             sb.Append($" {_halfMoveClock} {_fullMoveNumber}");
 
             return sb.ToString();
         }
 
-        public bool ApplyMove(string algebraicMove)
+        public bool TryApplyMove(string moveStr)
         {
-            if (!IsValidMove(algebraicMove)) return false;
+            if (string.IsNullOrEmpty(moveStr) || moveStr.Length < 4)
+                return false;
 
-            var (from, to) = AlgebraicToSquares(algebraicMove);
-            var piece = _board[from];
+            // Basic move parsing (e.g., e2e4, e7e8q for promotion)
+            string from = moveStr.Substring(0, 2);
+            string to = moveStr.Substring(2, 2);
+            char promotionPiece = moveStr.Length > 4 ? moveStr[4] : '\0';
 
-            // Reset en passant target
+            int fromSquare = AlgebraicToSquare(from);
+            int toSquare = AlgebraicToSquare(to);
+
+            if (fromSquare < 0 || fromSquare >= 64 || toSquare < 0 || toSquare >= 64)
+                return false;
+
+            var movingPiece = _board[fromSquare];
+            var capturedPiece = _board[toSquare];
+
+            if (movingPiece.Type == PieceType.None || movingPiece.Player != Turn)
+                return false;
+
+            // Update castling rights
+            UpdateCastlingRights(fromSquare, toSquare, movingPiece);
+
+            // Handle en passant
+            int? previousEnPassant = _enPassantTargetSquare;
             _enPassantTargetSquare = null;
 
-            // Handle pawn moves
-            if (piece.Type == PieceType.Pawn)
+            // Check for en passant capture
+            if (movingPiece.Type == PieceType.Pawn && toSquare == previousEnPassant)
             {
-                // En passant capture
-                if (Math.Abs(to - from) != 8 && _board[to].Type == PieceType.None)
-                {
-                    int capturedPawnSquare = to + (Turn == Player.White ? -8 : 8);
-                    _board[capturedPawnSquare] = new Piece(PieceType.None, Player.White);
-                }
-                // Set new en passant target
-                if (Math.Abs(to - from) == 16)
-                {
-                    _enPassantTargetSquare = from + (Turn == Player.White ? 8 : -8);
-                }
-                _halfMoveClock = 0;
+                int capturedPawnSquare = toSquare + (Turn == Player.White ? -8 : 8);
+                _board[capturedPawnSquare] = new Piece(PieceType.None, Player.White);
             }
-            else if (_board[to].Type != PieceType.None)
+
+            // Set en passant target for two-square pawn moves
+            if (movingPiece.Type == PieceType.Pawn && Math.Abs(toSquare - fromSquare) == 16)
             {
-                _halfMoveClock = 0; // Capture
+                _enPassantTargetSquare = fromSquare + (Turn == Player.White ? 8 : -8);
+            }
+
+            // Handle castling
+            if (movingPiece.Type == PieceType.King && Math.Abs(toSquare - fromSquare) == 2)
+            {
+                // Kingside castling
+                if (toSquare > fromSquare)
+                {
+                    _board[toSquare - 1] = _board[toSquare + 1];
+                    _board[toSquare + 1] = new Piece(PieceType.None, Player.White);
+                }
+                // Queenside castling
+                else
+                {
+                    _board[toSquare + 1] = _board[toSquare - 2];
+                    _board[toSquare - 2] = new Piece(PieceType.None, Player.White);
+                }
+            }
+
+            // Move the piece
+            _board[toSquare] = movingPiece;
+            _board[fromSquare] = new Piece(PieceType.None, Player.White);
+
+            // Handle pawn promotion
+            if (movingPiece.Type == PieceType.Pawn && (toSquare / 8 == 7 || toSquare / 8 == 0))
+            {
+                PieceType promotionType = promotionPiece switch
+                {
+                    'q' or 'Q' => PieceType.Queen,
+                    'r' or 'R' => PieceType.Rook,
+                    'b' or 'B' => PieceType.Bishop,
+                    'n' or 'N' => PieceType.Knight,
+                    _ => PieceType.Queen
+                };
+                _board[toSquare] = new Piece(promotionType, Turn);
+            }
+
+            // Update halfmove clock
+            if (movingPiece.Type == PieceType.Pawn || capturedPiece.Type != PieceType.None)
+            {
+                _halfMoveClock = 0;
             }
             else
             {
                 _halfMoveClock++;
             }
 
-            // Handle castling
-            if (piece.Type == PieceType.King && Math.Abs(from - to) == 2)
-            {
-                // Kingside
-                if (to > from)
-                {
-                    _board[to - 1] = _board[to + 1];
-                    _board[to + 1] = new Piece(PieceType.None, Player.White);
-                }
-                // Queenside
-                else
-                {
-                    _board[to + 1] = _board[to - 2];
-                    _board[to - 2] = new Piece(PieceType.None, Player.White);
-                }
-            }
-
-            // Update castling rights
-            if (piece.Type == PieceType.King)
-            {
-                if (Turn == Player.White)
-                {
-                    _whiteKingSideCastle = _whiteQueenSideCastle = false;
-                }
-                else
-                {
-                    _blackKingSideCastle = _blackQueenSideCastle = false;
-                }
-            }
-            if (piece.Type == PieceType.Rook)
-            {
-                if (from == 0) _whiteQueenSideCastle = false;
-                if (from == 7) _whiteKingSideCastle = false;
-                if (from == 56) _blackQueenSideCastle = false;
-                if (from == 63) _blackKingSideCastle = false;
-            }
-
-
-            // Move piece
-            _board[to] = _board[from];
-            _board[from] = new Piece(PieceType.None, Player.White);
-
-            // Pawn promotion
-            if (piece.Type == PieceType.Pawn && (to / 8 == 7 || to / 8 == 0))
-            {
-                // Default to Queen promotion for simplicity
-                _board[to] = new Piece(PieceType.Queen, Turn);
-            }
-
+            // Update fullmove number
             if (Turn == Player.Black)
             {
                 _fullMoveNumber++;
             }
 
+            // Switch turns
             Turn = (Turn == Player.White) ? Player.Black : Player.White;
+
+            // Check for draw conditions
+            CheckDrawConditions();
 
             return true;
         }
 
-        public bool IsValidMove(string algebraicMove)
+        private void UpdateCastlingRights(int from, int to, Piece piece)
         {
-            return GetLegalMoves().Contains(algebraicMove);
-        }
-
-        public bool IsCheckmate()
-        {
-            return IsInCheck(Turn) && GetLegalMoves().Count == 0;
-        }
-
-        public bool IsStalemate()
-        {
-            return !IsInCheck(Turn) && GetLegalMoves().Count == 0;
-        }
-
-        public List<string> GetLegalMoves()
-        {
-            var legalMoves = new List<string>();
-            var pseudoLegalMoves = GeneratePseudoLegalMoves(Turn);
-
-            foreach (var move in pseudoLegalMoves)
+            // King moves
+            if (piece.Type == PieceType.King)
             {
-                var (from, to) = AlgebraicToSquares(move);
-                var originalBoard = (Piece[])_board.Clone();
-                var originalTurn = Turn;
-                var originalWKS = _whiteKingSideCastle;
-                var originalWQS = _whiteQueenSideCastle;
-                var originalBKS = _blackKingSideCastle;
-                var originalBQS = _blackQueenSideCastle;
-                var originalEP = _enPassantTargetSquare;
-
-                // Make the move on a temporary board
-                _board[to] = _board[from];
-                _board[from] = new Piece(PieceType.None, Player.White);
-
-                // Simplified move for check testing
-                if (!IsInCheck(originalTurn))
+                if (piece.Player == Player.White)
                 {
-                    legalMoves.Add(move);
-                }
-
-                // Restore board state
-                _board = originalBoard;
-                Turn = originalTurn;
-                _whiteKingSideCastle = originalWKS;
-                _whiteQueenSideCastle = originalWQS;
-                _blackKingSideCastle = originalBKS;
-                _blackQueenSideCastle = originalBQS;
-                _enPassantTargetSquare = originalEP;
-            }
-            return legalMoves;
-        }
-
-        // --- Private Helper Methods ---
-
-        private void LoadFen(string fen)
-        {
-            _board = new Piece[64];
-            var parts = fen.Split(' ');
-            int rank = 7, file = 0;
-
-            // Piece placement
-            foreach (char c in parts[0])
-            {
-                if (c == '/')
-                {
-                    rank--;
-                    file = 0;
-                }
-                else if (char.IsDigit(c))
-                {
-                    file += int.Parse(c.ToString());
+                    _whiteKingSideCastle = false;
+                    _whiteQueenSideCastle = false;
                 }
                 else
                 {
-                    _board[rank * 8 + file] = GetPieceFromChar(c);
-                    file++;
+                    _blackKingSideCastle = false;
+                    _blackQueenSideCastle = false;
                 }
             }
 
-            // Active color
-            Turn = (parts[1] == "w") ? Player.White : Player.Black;
-
-            // Castling availability
-            _whiteKingSideCastle = parts[2].Contains('K');
-            _whiteQueenSideCastle = parts[2].Contains('Q');
-            _blackKingSideCastle = parts[2].Contains('k');
-            _blackQueenSideCastle = parts[2].Contains('q');
-
-            // En passant target square
-            if (parts[3] != "-")
-            {
-                _enPassantTargetSquare = StringToSquare(parts[3]);
-            }
-            else
-            {
-                _enPassantTargetSquare = null;
-            }
-
-            // Halfmove clock
-            _halfMoveClock = int.Parse(parts[4]);
-
-            // Fullmove number
-            _fullMoveNumber = int.Parse(parts[5]);
+            // Rook moves or captures
+            if (from == 0 || to == 0) _whiteQueenSideCastle = false;
+            if (from == 7 || to == 7) _whiteKingSideCastle = false;
+            if (from == 56 || to == 56) _blackQueenSideCastle = false;
+            if (from == 63 || to == 63) _blackKingSideCastle = false;
         }
 
-        private List<string> GeneratePseudoLegalMoves(Player player)
+        private void CheckDrawConditions()
         {
-            var moves = new List<string>();
+            // 50-move rule
+            if (_halfMoveClock >= 100)
+            {
+                IsGameOver = true;
+                GameResult = "1/2-1/2";
+                return;
+            }
+
+            // Insufficient material (simplified check)
+            var pieces = new List<(PieceType type, Player player)>();
             for (int i = 0; i < 64; i++)
             {
-                if (_board[i].Type != PieceType.None && _board[i].Player == player)
+                if (_board[i].Type != PieceType.None && _board[i].Type != PieceType.King)
                 {
-                    moves.AddRange(GenerateMovesForPiece(i));
-                }
-            }
-            return moves;
-        }
-
-        private IEnumerable<string> GenerateMovesForPiece(int square)
-        {
-            var piece = _board[square];
-            switch (piece.Type)
-            {
-                case PieceType.Pawn: return GeneratePawnMoves(square, piece.Player);
-                case PieceType.Knight: return GenerateSlidingMoves(square, piece.Player, new[] { -17, -15, -10, -6, 6, 10, 15, 17 }, false);
-                case PieceType.Bishop: return GenerateSlidingMoves(square, piece.Player, new[] { -9, -7, 7, 9 }, true);
-                case PieceType.Rook: return GenerateSlidingMoves(square, piece.Player, new[] { -8, -1, 1, 8 }, true);
-                case PieceType.Queen: return GenerateSlidingMoves(square, piece.Player, new[] { -9, -8, -7, -1, 1, 7, 8, 9 }, true);
-                case PieceType.King: return GenerateKingMoves(square, piece.Player);
-                default: return Enumerable.Empty<string>();
-            }
-        }
-
-        private IEnumerable<string> GeneratePawnMoves(int square, Player player)
-        {
-            var moves = new List<string>();
-            int direction = player == Player.White ? 1 : -1;
-            int startRank = player == Player.White ? 1 : 6;
-
-            // Forward one
-            int oneStep = square + (8 * direction);
-            if (IsOnBoard(oneStep) && _board[oneStep].Type == PieceType.None)
-            {
-                moves.Add(SquareToString(square) + SquareToString(oneStep));
-                // Forward two from start
-                if (square / 8 == startRank)
-                {
-                    int twoSteps = square + (16 * direction);
-                    if (IsOnBoard(twoSteps) && _board[twoSteps].Type == PieceType.None)
-                    {
-                        moves.Add(SquareToString(square) + SquareToString(twoSteps));
-                    }
+                    pieces.Add((_board[i].Type, _board[i].Player));
                 }
             }
 
-            // Captures
-            int[] captureOffsets = { 7, 9 };
-            foreach (var offset in captureOffsets)
+            // King vs King
+            if (pieces.Count == 0)
             {
-                int targetSquare = square + (offset * direction);
-                // Check for different file
-                if (IsOnBoard(targetSquare) && Math.Abs((square % 8) - (targetSquare % 8)) == 1)
-                {
-                    if (_board[targetSquare].Type != PieceType.None && _board[targetSquare].Player != player)
-                    {
-                        moves.Add(SquareToString(square) + SquareToString(targetSquare));
-                    }
-                    if (targetSquare == _enPassantTargetSquare)
-                    {
-                        moves.Add(SquareToString(square) + SquareToString(targetSquare));
-                    }
-                }
+                IsGameOver = true;
+                GameResult = "1/2-1/2";
+                return;
             }
-            return moves;
+
+            // King + minor piece vs King
+            if (pieces.Count == 1 && (pieces[0].type == PieceType.Bishop || pieces[0].type == PieceType.Knight))
+            {
+                IsGameOver = true;
+                GameResult = "1/2-1/2";
+                return;
+            }
         }
 
-        private IEnumerable<string> GenerateKingMoves(int square, Player player)
+        // Helper methods
+        private int AlgebraicToSquare(string algebraic)
         {
-            var moves = GenerateSlidingMoves(square, player, new[] { -9, -8, -7, -1, 1, 7, 8, 9 }, false).ToList();
-
-            // Castling
-            if (player == Player.White)
-            {
-                if (_whiteKingSideCastle && _board[5].Type == PieceType.None && _board[6].Type == PieceType.None && !IsSquareAttacked(4, Player.Black) && !IsSquareAttacked(5, Player.Black) && !IsSquareAttacked(6, Player.Black))
-                    moves.Add("e1g1");
-                if (_whiteQueenSideCastle && _board[1].Type == PieceType.None && _board[2].Type == PieceType.None && _board[3].Type == PieceType.None && !IsSquareAttacked(4, Player.Black) && !IsSquareAttacked(3, Player.Black) && !IsSquareAttacked(2, Player.Black))
-                    moves.Add("e1c1");
-            }
-            else
-            {
-                if (_blackKingSideCastle && _board[61].Type == PieceType.None && _board[62].Type == PieceType.None && !IsSquareAttacked(60, Player.White) && !IsSquareAttacked(61, Player.White) && !IsSquareAttacked(62, Player.White))
-                    moves.Add("e8g8");
-                if (_blackQueenSideCastle && _board[57].Type == PieceType.None && _board[58].Type == PieceType.None && _board[59].Type == PieceType.None && !IsSquareAttacked(60, Player.White) && !IsSquareAttacked(59, Player.White) && !IsSquareAttacked(58, Player.White))
-                    moves.Add("e8c8");
-            }
-
-            return moves;
+            if (algebraic.Length < 2) return -1;
+            int file = algebraic[0] - 'a';
+            int rank = algebraic[1] - '1';
+            if (file < 0 || file > 7 || rank < 0 || rank > 7) return -1;
+            return rank * 8 + file;
         }
 
-        private IEnumerable<string> GenerateSlidingMoves(int square, Player player, int[] directions, bool isSliding)
-        {
-            var moves = new List<string>();
-            foreach (var direction in directions)
-            {
-                for (int i = 1; i < 8; i++)
-                {
-                    int targetSquare = square + direction * i;
-                    if (!IsOnBoard(targetSquare) || Math.Abs((targetSquare % 8) - ((square + direction * (i-1)) % 8)) > 1 && Math.Abs(direction) != 8 && Math.Abs(direction) != 16) break;
-
-                    if (_board[targetSquare].Type == PieceType.None)
-                    {
-                        moves.Add(SquareToString(square) + SquareToString(targetSquare));
-                    }
-                    else
-                    {
-                        if (_board[targetSquare].Player != player)
-                        {
-                            moves.Add(SquareToString(square) + SquareToString(targetSquare));
-                        }
-                        break;
-                    }
-
-                    if (!isSliding) break;
-                }
-            }
-            return moves;
-        }
-
-        private bool IsInCheck(Player player)
-        {
-            int kingSquare = -1;
-            for (int i = 0; i < 64; i++)
-            {
-                if (_board[i].Type == PieceType.King && _board[i].Player == player)
-                {
-                    kingSquare = i;
-                    break;
-                }
-            }
-            return IsSquareAttacked(kingSquare, player == Player.White ? Player.Black : Player.White);
-        }
-
-        private bool IsSquareAttacked(int square, Player byPlayer)
-        {
-            var opponentMoves = GeneratePseudoLegalMoves(byPlayer);
-            foreach (var move in opponentMoves)
-            {
-                if (AlgebraicToSquares(move).to == square)
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private (int from, int to) AlgebraicToSquares(string move)
-        {
-            int fromFile = move[0] - 'a';
-            int fromRank = move[1] - '1';
-            int toFile = move[2] - 'a';
-            int toRank = move[3] - '1';
-            return (fromRank * 8 + fromFile, toRank * 8 + toFile);
-        }
-
-        private string SquareToString(int square)
+        private string SquareToAlgebraic(int square)
         {
             return $"{(char)('a' + (square % 8))}{(char)('1' + (square / 8))}";
-        }
-
-        private int StringToSquare(string s)
-        {
-            return (s[1] - '1') * 8 + (s[0] - 'a');
         }
 
         private char GetPieceChar(Piece piece)
@@ -486,7 +364,5 @@ namespace Database.Services
             };
             return new Piece(type, player);
         }
-
-        private bool IsOnBoard(int square) => square >= 0 && square < 64;
     }
 }

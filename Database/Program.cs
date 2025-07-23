@@ -1,3 +1,4 @@
+using Database.Configuration;
 using Database.Context;
 using Database.Hubs;
 using Database.Services;
@@ -19,9 +20,13 @@ builder.Services.AddLogging(config =>
     config.AddDebug();
 });
 
-builder.Services.AddScoped<IEngineService, EngineService>();
+builder.Services.Configure<BatchProcessingOptions>(
+    builder.Configuration.GetSection("BatchProcessing"));
+// Register improved services
+builder.Services.AddSingleton<IEngineService, EngineService>();
 builder.Services.AddScoped<IChessService, ChessService>();
-builder.Services.AddHostedService<MoveGenerationService>();
+builder.Services.AddSingleton<IBatchQueueService, BatchQueueService>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<IBatchQueueService>() as BatchQueueService);
 builder.Services.AddSignalR();
 
 // Configure form options for file uploads

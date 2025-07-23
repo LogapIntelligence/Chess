@@ -16,13 +16,16 @@ namespace Database.Controllers
     {
         private readonly MainContext _context;
         private readonly IWebHostEnvironment _environment;
-        private readonly IEngineService _engineService;
+        private readonly IBatchQueueService _batchQueueService;
 
-        public ChessEngineController(MainContext context, IWebHostEnvironment environment, IEngineService engineService)
+        public ChessEngineController(
+            MainContext context,
+            IWebHostEnvironment environment,
+            IBatchQueueService batchQueueService)
         {
             _context = context;
             _environment = environment;
-            _engineService = engineService;
+            _batchQueueService = batchQueueService;
         }
 
         [HttpGet]
@@ -57,10 +60,14 @@ namespace Database.Controllers
                 _context.Batches.Add(batch);
                 await _context.SaveChangesAsync();
 
-                // The background service will pick this up.
-                // We could also directly trigger it via the service.
-                await _engineService.StartGenerationBatch(batch);
+                var batchWithEngine = _context.Batches.Where(x => x.Id == batch.Id)
+                    .Include(x=>x.Engine)
+                    .FirstOrDefault();
 
+                // Queue the batch for processing
+                await _batchQueueService.EnqueueBatchAsync(batchWithEngine);
+
+                TempData["Success"] = $"Batch {batch.BatchId} has been queued for processing.";
                 return RedirectToAction("Index", "Home");
             }
 
@@ -121,6 +128,7 @@ namespace Database.Controllers
                     _context.Engines.Add(engine);
                     await _context.SaveChangesAsync();
 
+                    TempData["Success"] = $"Engine '{engine.Name}' has been uploaded successfully.";
                     return RedirectToAction("Index", "Home");
                 }
                 ModelState.AddModelError("EngineFile", "Please select a file to upload.");
@@ -128,6 +136,24 @@ namespace Database.Controllers
 
             ViewData["Title"] = "Upload Chess Engine";
             return View(viewModel);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Status()
+        {
+            ViewData["Title"] = "Batch Processing Status";
+
+            var activeBatches = await _context.Batches
+                .Include(b => b.Engine)
+                .Include(b => b.Games)
+                .Where(b => b.Status == "InProgress" || b.Status == "Pending")
+                .OrderBy(b => b.CreatedAt)
+                .ToListAsync();
+
+            ViewBag.QueueLength = _batchQueueService.GetQueueLength();
+            ViewBag.ActiveProcessors = _batchQueueService.GetActiveProcessorCount();
+
+            return View(activeBatches);
         }
     }
 }

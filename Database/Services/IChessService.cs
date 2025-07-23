@@ -1,17 +1,14 @@
-﻿using System.Collections.Generic;
-
-namespace Database.Services
+﻿namespace Database.Services
 {
     public interface IChessService
     {
-        void NewGame();
+        void LoadFen(string fen);
+        void LoadStartingPosition();
         string GetFen();
-        bool ApplyMove(string algebraicMove);
-        bool IsValidMove(string algebraicMove);
-        bool IsCheckmate();
-        bool IsStalemate();
+        bool TryApplyMove(string algebraicMove);
+        bool IsGameOver { get; }
+        string GameResult { get; }
         Player Turn { get; }
-        List<string> GetLegalMoves();
     }
 
     public enum Player
