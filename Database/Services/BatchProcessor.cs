@@ -162,13 +162,14 @@ namespace Database.Services
                             MoveNumber = moveNumber + 1,
                             Fen = fen,
                             Evaluation = 0, // Draw evaluation for rule-based draws
+                            Depth = 0, // No search depth for final position
                             ZobristHash = ComputeZobristHash(fen)
                         });
                         break;
                     }
 
                     // Get best move from engine only if game is not over
-                    var analysis = await _engineInstance.AnalyzePositionAsync(fen, (int)_batch.Depth);
+                    var analysis = await _engineInstance.AnalyzePositionAsync(fen, _batch.MovetimeMs); // Use MovetimeMs
 
                     // Check if the position is checkmate based on evaluation
                     // Mate evaluations are typically 10000 - moves_to_mate
@@ -180,6 +181,7 @@ namespace Database.Services
                             MoveNumber = moveNumber + 1,
                             Fen = fen,
                             Evaluation = analysis.Evaluation,
+                            Depth = analysis.Depth, // Store actual depth reached
                             ZobristHash = ComputeZobristHash(fen)
                         });
 
@@ -241,6 +243,7 @@ namespace Database.Services
                         MoveNumber = moveNumber,
                         Fen = chessService.GetFen(),
                         Evaluation = analysis.Evaluation,
+                        Depth = analysis.Depth, // Store actual depth reached
                         ZobristHash = ComputeZobristHash(chessService.GetFen())
                     });
 

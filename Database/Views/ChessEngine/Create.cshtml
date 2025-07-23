@@ -16,9 +16,10 @@
             <span asp-validation-for="EngineId" class="text-red-500 text-xs italic"></span>
         </div>
         <div class="mb-4">
-            <label asp-for="Depth" class="block text-gray-300 text-sm font-bold mb-2">Search Depth</label>
-            <input asp-for="Depth" type="number" min="1" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline" />
-            <span asp-validation-for="Depth" class="text-red-500 text-xs italic"></span>
+            <label asp-for="MovetimeMs" class="block text-gray-300 text-sm font-bold mb-2">Move Time (milliseconds)</label>
+            <input asp-for="MovetimeMs" type="number" min="1" max="60000" value="1000" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline" />
+            <span class="text-gray-400 text-xs">Time allowed per move (100ms - 60s)</span>
+            <span asp-validation-for="MovetimeMs" class="text-red-500 text-xs italic block"></span>
         </div>
         <div class="mb-6">
             <label asp-for="TotalGames" class="block text-gray-300 text-sm font-bold mb-2">Number of Games</label>

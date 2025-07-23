@@ -11,13 +11,15 @@ namespace Database.ViewModels
         public long EngineId { get; set; }
 
         [Required]
-        [Range(1, 100)]
-        public long Depth { get; set; }
+        [Range(1, 60000)] // 100ms to 60 seconds
+        [Display(Name = "Move Time (ms)")]
+        public long MovetimeMs { get; set; }
 
         [Required]
         [Range(1, 10000)]
         [Display(Name = "Number of Games")]
         public long TotalGames { get; set; }
+
         [BindNever]
         public IEnumerable<Engine> Engines { get; set; }
     }

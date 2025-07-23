@@ -50,7 +50,7 @@ namespace Database.Controllers
                 {
                     BatchId = Guid.NewGuid().ToString("N"),
                     EngineId = viewModel.EngineId,
-                    Depth = viewModel.Depth,
+                    MovetimeMs = viewModel.MovetimeMs, // Changed from Depth
                     TotalGames = viewModel.TotalGames,
                     CreatedAt = DateTime.UtcNow,
                     Status = "Pending",
@@ -61,7 +61,7 @@ namespace Database.Controllers
                 await _context.SaveChangesAsync();
 
                 var batchWithEngine = _context.Batches.Where(x => x.Id == batch.Id)
-                    .Include(x=>x.Engine)
+                    .Include(x => x.Engine)
                     .FirstOrDefault();
 
                 // Queue the batch for processing

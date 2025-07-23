@@ -15,8 +15,8 @@ namespace Database.Services
         string EnginePath { get; }
         bool IsReady { get; }
         Task InitializeAsync();
-        Task<string> GetBestMoveAsync(string fen, int depth);
-        Task<EngineAnalysis> AnalyzePositionAsync(string fen, int depth);
+        Task<string> GetBestMoveAsync(string fen, long movetimeMs); // Changed parameter
+        Task<EngineAnalysis> AnalyzePositionAsync(string fen, long movetimeMs); // Changed parameter
         Task QuitAsync();
     }
 

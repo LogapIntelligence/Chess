@@ -29,7 +29,7 @@ namespace Database.Models
 
         public long EngineId { get; set; }
 
-        public long Depth { get; set; }
+        public long MovetimeMs { get; set; } // Changed from Depth to MovetimeMs
 
         public long TotalGames { get; set; }
 
@@ -78,6 +78,8 @@ namespace Database.Models
         public long ZobristHash { get; set; }
 
         public float Evaluation { get; set; }
+
+        public int Depth { get; set; } // Added depth field
 
         // Navigation property
         public ChessGame ChessGame { get; set; }

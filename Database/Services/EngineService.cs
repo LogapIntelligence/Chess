@@ -86,7 +86,7 @@ namespace Database.Services
             _logger.LogInformation($"Engine initialized: {Path.GetFileName(EnginePath)}");
         }
 
-        public async Task<string> GetBestMoveAsync(string fen, int depth)
+        public async Task<string> GetBestMoveAsync(string fen, long movetimeMs)
         {
             if (!IsReady) throw new InvalidOperationException("Engine not ready");
 
@@ -94,9 +94,9 @@ namespace Database.Services
             try
             {
                 await SendCommandAsync($"position fen {fen}");
-                await SendCommandAsync($"go depth {depth}");
+                await SendCommandAsync($"go movetime {movetimeMs}");
 
-                var bestMove = await WaitForBestMoveAsync(TimeSpan.FromSeconds(30));
+                var bestMove = await WaitForBestMoveAsync(TimeSpan.FromMilliseconds(movetimeMs + 5000)); // Add buffer
                 return bestMove;
             }
             finally
@@ -105,7 +105,7 @@ namespace Database.Services
             }
         }
 
-        public async Task<EngineAnalysis> AnalyzePositionAsync(string fen, int depth)
+        public async Task<EngineAnalysis> AnalyzePositionAsync(string fen, long movetimeMs)
         {
             if (!IsReady) throw new InvalidOperationException("Engine not ready");
 
@@ -119,10 +119,10 @@ namespace Database.Services
                 bool isBlackToMove = fenParts.Length > 1 && fenParts[1] == "b";
 
                 await SendCommandAsync($"position fen {fen}");
-                await SendCommandAsync($"go depth {depth}");
+                await SendCommandAsync($"go movetime {movetimeMs}");
 
                 string line;
-                var timeout = DateTime.UtcNow.AddSeconds(30);
+                var timeout = DateTime.UtcNow.AddMilliseconds(movetimeMs + 5000); // Add buffer
 
                 while (DateTime.UtcNow < timeout)
                 {
