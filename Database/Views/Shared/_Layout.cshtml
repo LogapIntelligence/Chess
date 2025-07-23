@@ -56,8 +56,11 @@
                     <div>
                         <h1 class="text-xl font-semibold">@ViewData["Title"]</h1>
                     </div>
-                    <div>
-                        <!-- User profile or other header items can go here -->
+                    <div id="connection-status" class="flex items-center">
+                        <span class="text-sm text-gray-400 mr-2">Connection:</span>
+                        <span id="connection-indicator" class="text-sm">
+                            <i class="fas fa-circle text-gray-500"></i> Disconnected
+                        </span>
                     </div>
                 </div>
             </header>
@@ -67,9 +70,79 @@
         </div>
     </div>
 
+    <!-- Scripts - Load in correct order -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js"></script>
+
+    <!-- SignalR must be loaded before any code that uses it -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.0/signalr.min.js"></script>
+
+    <!-- Global SignalR connection script -->
+    <script>
+        // Wait for SignalR to be loaded
+        if (typeof signalR !== 'undefined') {
+            // Create global connection
+            window.dashboardConnection = new signalR.HubConnectionBuilder()
+                .withUrl("/dashboardHub")
+                .withAutomaticReconnect([0, 2000, 5000, 10000, 30000]) // Reconnect delays
+                .configureLogging(signalR.LogLevel.Warning)
+                .build();
+
+            // Connection status indicator
+            function updateConnectionStatus(status, color, icon) {
+                const indicator = document.getElementById('connection-indicator');
+                if (indicator) {
+                    indicator.innerHTML = `<i class="fas fa-circle text-${color}"></i> ${status}`;
+                }
+            }
+
+            // Connection event handlers
+            window.dashboardConnection.onreconnecting(() => {
+                console.log("SignalR Reconnecting...");
+                updateConnectionStatus('Reconnecting...', 'yellow-500', 'circle');
+            });
+
+            window.dashboardConnection.onreconnected((connectionId) => {
+                console.log("SignalR Reconnected:", connectionId);
+                updateConnectionStatus('Connected', 'green-500', 'circle');
+            });
+
+            window.dashboardConnection.onclose((error) => {
+                console.error("SignalR Connection closed:", error);
+                updateConnectionStatus('Disconnected', 'red-500', 'circle');
+            });
+
+            // Start the connection
+            async function startConnection() {
+                try {
+                    await window.dashboardConnection.start();
+                    console.log("SignalR Connected:", window.dashboardConnection.connectionId);
+                    updateConnectionStatus('Connected', 'green-500', 'circle');
+                } catch (err) {
+                    console.error("SignalR Connection Error:", err);
+                    updateConnectionStatus('Error', 'red-500', 'exclamation-triangle');
+                    // Retry after 5 seconds
+                    setTimeout(startConnection, 5000);
+                }
+            }
+
+            // Start connection when page loads
+            startConnection();
+
+            // Global error handler for SignalR
+            window.dashboardConnection.on("error", (error) => {
+                console.error("SignalR Hub Error:", error);
+            });
+
+        } else {
+            console.error("SignalR library not loaded!");
+        }
+    </script>
+
+    <!-- Site scripts -->
     <script src="~/js/site.js" asp-append-version="true"></script>
+
+    <!-- Page-specific scripts -->
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

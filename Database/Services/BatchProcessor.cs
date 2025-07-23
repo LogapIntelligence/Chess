@@ -1,12 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using Database.Context;
+﻿using Database.Context;
+using Database.Hubs;
 using Database.Models;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Database.Services
 {
@@ -141,9 +143,15 @@ namespace Database.Services
                 int moveNumber = 0;
                 int consecutiveFailures = 0;
                 const int maxConsecutiveFailures = 3;
-                const int maxMoves = 300; // Prevent infinite games
+                const int maxMoves = 300;
                 bool gameEnded = false;
                 string gameResult = "*";
+
+                // Create a temporary game ID for live display
+                var tempGameId = Guid.NewGuid().ToString();
+
+                // Notify hub that a new game is starting
+                await NotifyGameStarted(tempGameId);
 
                 while (!gameEnded && moveNumber < maxMoves && !cancellationToken.IsCancellationRequested)
                 {
@@ -157,33 +165,37 @@ namespace Database.Services
                         _logger.LogInformation($"Game ended by rule: {gameResult} after {moveNumber} moves");
 
                         // Store the final position
-                        moves.Add(new ChessMove
+                        var finalMove = new ChessMove
                         {
                             MoveNumber = moveNumber + 1,
                             Fen = fen,
-                            Evaluation = 0, // Draw evaluation for rule-based draws
-                            Depth = 0, // No search depth for final position
+                            Evaluation = 0,
+                            Depth = 0,
                             ZobristHash = ComputeZobristHash(fen)
-                        });
+                        };
+                        moves.Add(finalMove);
+
+                        // Notify hub of final position
+                        await NotifyNewMove(tempGameId, finalMove, gameResult);
                         break;
                     }
 
                     // Get best move from engine only if game is not over
-                    var analysis = await _engineInstance.AnalyzePositionAsync(fen, _batch.MovetimeMs); // Use MovetimeMs
+                    var analysis = await _engineInstance.AnalyzePositionAsync(fen, _batch.MovetimeMs);
 
                     // Check if the position is checkmate based on evaluation
-                    // Mate evaluations are typically 10000 - moves_to_mate
                     if (Math.Abs(analysis.Evaluation) >= 9999)
                     {
                         // Store the final position
-                        moves.Add(new ChessMove
+                        var finalMove = new ChessMove
                         {
                             MoveNumber = moveNumber + 1,
                             Fen = fen,
                             Evaluation = analysis.Evaluation,
-                            Depth = analysis.Depth, // Store actual depth reached
+                            Depth = analysis.Depth,
                             ZobristHash = ComputeZobristHash(fen)
-                        });
+                        };
+                        moves.Add(finalMove);
 
                         // Determine winner based on evaluation and whose turn it is
                         var fenParts = fen.Split(' ');
@@ -191,17 +203,18 @@ namespace Database.Services
 
                         if (analysis.Evaluation > 9990)
                         {
-                            // Positive mate score means the side to move has a winning position
                             gameResult = isWhiteToMove ? "1-0" : "0-1";
                         }
                         else
                         {
-                            // Negative mate score means the side to move is being mated
                             gameResult = isWhiteToMove ? "0-1" : "1-0";
                         }
 
                         gameEnded = true;
                         _logger.LogInformation($"Game ended in checkmate: {gameResult} after {moveNumber} moves");
+
+                        // Notify hub of final position
+                        await NotifyNewMove(tempGameId, finalMove, gameResult);
                         break;
                     }
 
@@ -212,7 +225,7 @@ namespace Database.Services
                         if (consecutiveFailures >= maxConsecutiveFailures)
                         {
                             _logger.LogError($"Too many consecutive failures, ending game");
-                            gameResult = "1/2-1/2"; // Assume draw if engine fails
+                            gameResult = "1/2-1/2";
                             gameEnded = true;
                             break;
                         }
@@ -227,25 +240,29 @@ namespace Database.Services
                         if (consecutiveFailures >= maxConsecutiveFailures)
                         {
                             _logger.LogError($"Too many consecutive failures, ending game");
-                            gameResult = "1/2-1/2"; // Assume draw if moves fail
+                            gameResult = "1/2-1/2";
                             gameEnded = true;
                             break;
                         }
                         continue;
                     }
 
-                    consecutiveFailures = 0; // Reset on successful move
+                    consecutiveFailures = 0;
                     moveNumber++;
 
                     // Store move with analysis data
-                    moves.Add(new ChessMove
+                    var move = new ChessMove
                     {
                         MoveNumber = moveNumber,
                         Fen = chessService.GetFen(),
                         Evaluation = analysis.Evaluation,
-                        Depth = analysis.Depth, // Store actual depth reached
+                        Depth = analysis.Depth,
                         ZobristHash = ComputeZobristHash(chessService.GetFen())
-                    });
+                    };
+                    moves.Add(move);
+
+                    // Notify hub of the new move
+                    await NotifyNewMove(tempGameId, move, null);
 
                     // Check if ChessService detected a draw after the move
                     if (chessService.IsGameOver)
@@ -264,12 +281,6 @@ namespace Database.Services
                         _logger.LogInformation($"Game ended by max moves limit: {moveNumber} moves");
                         break;
                     }
-
-                    // Log progress
-                    if (moveNumber % 50 == 0)
-                    {
-                        _logger.LogDebug($"Game in progress: {moveNumber} moves, halfmove clock: {fen.Split(' ')[4]}");
-                    }
                 }
 
                 var game = new ChessGame
@@ -280,6 +291,9 @@ namespace Database.Services
                     Moves = moves
                 };
 
+                // Notify hub that game is complete
+                await NotifyGameComplete(tempGameId, game);
+
                 _logger.LogInformation($"Game completed: {moveNumber} moves, result: {game.Result}");
                 return game;
             }
@@ -287,6 +301,73 @@ namespace Database.Services
             {
                 _logger.LogError(ex, "Error generating game");
                 return null;
+            }
+        }
+
+        private async Task NotifyGameStarted(string tempGameId)
+        {
+            try
+            {
+                using var scope = _serviceProvider.CreateScope();
+                var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<DashboardHub>>();
+
+                await hubContext.Clients.All.SendAsync("GameStarted", new
+                {
+                    tempGameId = tempGameId,
+                    batchId = _batch.Id,
+                    engineName = _batch.Engine.Name,
+                    movetime = _batch.MovetimeMs
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to notify game started");
+            }
+        }
+
+        private async Task NotifyNewMove(string tempGameId, ChessMove move, string gameResult)
+        {
+            try
+            {
+                using var scope = _serviceProvider.CreateScope();
+                var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<DashboardHub>>();
+
+                await hubContext.Clients.All.SendAsync("NewMove", new
+                {
+                    tempGameId = tempGameId,
+                    batchId = _batch.Id,
+                    moveNumber = move.MoveNumber,
+                    fen = move.Fen,
+                    evaluation = move.Evaluation,
+                    depth = move.Depth,
+                    gameResult = gameResult
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to notify new move");
+            }
+        }
+
+        private async Task NotifyGameComplete(string tempGameId, ChessGame game)
+        {
+            try
+            {
+                using var scope = _serviceProvider.CreateScope();
+                var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<DashboardHub>>();
+
+                await hubContext.Clients.All.SendAsync("GameComplete", new
+                {
+                    tempGameId = tempGameId,
+                    batchId = _batch.Id,
+                    gameId = game.Id,
+                    result = game.Result,
+                    moveCount = game.MoveCount
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to notify game complete");
             }
         }
 
