@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Database.Models;
@@ -21,10 +22,10 @@ namespace Database.Services
             _serviceProvider = serviceProvider;
         }
 
-        public async Task<IEngineInstance> CreateEngineInstanceAsync(string enginePath)
+        public async Task<IEngineInstance> CreateEngineInstanceAsync(string enginePath, string parametersJson = null)
         {
             var instance = new EngineInstance(enginePath, _logger);
-            await instance.InitializeAsync();
+            await instance.InitializeAsync(parametersJson);
             return instance;
         }
 
@@ -51,7 +52,7 @@ namespace Database.Services
             _logger = logger;
         }
 
-        public async Task InitializeAsync()
+        public async Task InitializeAsync(string parametersJson = null)
         {
             _process = new Process
             {
@@ -74,9 +75,59 @@ namespace Database.Services
             await SendCommandAsync("uci");
             await WaitForResponseAsync("uciok", TimeSpan.FromSeconds(5));
 
-            // Set options if needed (e.g., hash size, threads)
-            await SendCommandAsync("setoption name Hash value 128");
-            await SendCommandAsync("setoption name Threads value 1");
+            // Parse and apply engine parameters
+            if (!string.IsNullOrEmpty(parametersJson))
+            {
+                try
+                {
+                    var options = JsonSerializer.Deserialize<EngineParameters>(parametersJson);
+
+                    if (options != null)
+                    {
+                        // Set threads
+                        if (options.Threads > 0)
+                        {
+                            await SendCommandAsync($"setoption name Threads value {options.Threads}");
+                            _logger.LogInformation($"Set Threads to {options.Threads}");
+                        }
+
+                        // Set hash size
+                        if (options.Hash > 0)
+                        {
+                            await SendCommandAsync($"setoption name Hash value {options.Hash}");
+                            _logger.LogInformation($"Set Hash to {options.Hash} MB");
+                        }
+
+                        // Set MultiPV
+                        if (options.MultiPV > 1)
+                        {
+                            await SendCommandAsync($"setoption name MultiPV value {options.MultiPV}");
+                            _logger.LogInformation($"Set MultiPV to {options.MultiPV}");
+                        }
+
+                        // Set Contempt
+                        await SendCommandAsync($"setoption name Contempt value {options.Contempt}");
+                        _logger.LogInformation($"Set Contempt to {options.Contempt}");
+
+                        // Set NNUE
+                        await SendCommandAsync($"setoption name UseNNUE value {options.UseNNUE.ToString().ToLower()}");
+                        _logger.LogInformation($"Set UseNNUE to {options.UseNNUE}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning($"Failed to parse engine parameters: {ex.Message}. Using defaults.");
+                    // Fall back to defaults
+                    await SendCommandAsync("setoption name Hash value 128");
+                    await SendCommandAsync("setoption name Threads value 1");
+                }
+            }
+            else
+            {
+                // Default options if no parameters provided
+                await SendCommandAsync("setoption name Hash value 128");
+                await SendCommandAsync("setoption name Threads value 1");
+            }
 
             // Send isready and wait for readyok
             await SendCommandAsync("isready");
@@ -273,5 +324,15 @@ namespace Database.Services
             _process?.Dispose();
             _semaphore?.Dispose();
         }
+    }
+
+    // Helper class for deserializing engine parameters
+    public class EngineParameters
+    {
+        public int Threads { get; set; }
+        public int Hash { get; set; }
+        public int MultiPV { get; set; }
+        public bool UseNNUE { get; set; }
+        public int Contempt { get; set; }
     }
 }

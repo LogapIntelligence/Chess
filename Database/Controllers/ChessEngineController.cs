@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.IO;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Database.Controllers
@@ -34,7 +35,15 @@ namespace Database.Controllers
             ViewData["Title"] = "Create New Generation Batch";
             var viewModel = new CreateBatchViewModel
             {
-                Engines = await _context.Engines.Where(e => e.IsActive).ToListAsync()
+                Engines = await _context.Engines.Where(e => e.IsActive).ToListAsync(),
+                // Set default values
+                MovetimeMs = 1000,
+                TotalGames = 10,
+                Threads = Environment.ProcessorCount, // Use half of available cores by default
+                HashSizeMB = 128,
+                MultiPV = 1,
+                UseNNUE = true,
+                Contempt = 0
             };
             return View(viewModel);
         }
@@ -46,15 +55,25 @@ namespace Database.Controllers
             ModelState.Remove(nameof(CreateBatchViewModel.Engines));
             if (ModelState.IsValid)
             {
+                // Create engine parameters object
+                var engineParams = new
+                {
+                    Threads = viewModel.Threads,
+                    Hash = viewModel.HashSizeMB,
+                    MultiPV = viewModel.MultiPV,
+                    UseNNUE = viewModel.UseNNUE,
+                    Contempt = viewModel.Contempt
+                };
+
                 var batch = new Batch
                 {
                     BatchId = Guid.NewGuid().ToString("N"),
                     EngineId = viewModel.EngineId,
-                    MovetimeMs = viewModel.MovetimeMs, // Changed from Depth
+                    MovetimeMs = viewModel.MovetimeMs,
                     TotalGames = viewModel.TotalGames,
                     CreatedAt = DateTime.UtcNow,
                     Status = "Pending",
-                    Parameters = "{}" // Add any extra parameters here as JSON
+                    Parameters = JsonSerializer.Serialize(engineParams) // Store engine parameters as JSON
                 };
 
                 _context.Batches.Add(batch);

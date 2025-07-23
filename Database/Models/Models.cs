@@ -32,7 +32,6 @@ namespace Database.Models
         public long MovetimeMs { get; set; } // Changed from Depth to MovetimeMs
 
         public long TotalGames { get; set; }
-
         public DateTime CreatedAt { get; set; }
 
         public DateTime? CompletedAt { get; set; }

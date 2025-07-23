@@ -4,30 +4,82 @@
     ViewData["Title"] = "New Generation Batch";
 }
 
-<div class="max-w-2xl mx-auto bg-gray-800 p-8 rounded-lg shadow-lg">
+<div class="max-w-4xl mx-auto bg-gray-800 p-8 rounded-lg shadow-lg">
     <h2 class="text-2xl font-bold text-white mb-6">Create New Generation Batch</h2>
     <form asp-action="Create" method="post">
         @Html.AntiForgeryToken()
-        <div class="mb-4">
-            <label asp-for="EngineId" class="block text-gray-300 text-sm font-bold mb-2">Chess Engine</label>
-            <select asp-for="EngineId" asp-items="@(new SelectList(Model.Engines, "Id", "Name"))" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline">
-                <option value="">Select an Engine</option>
-            </select>
-            <span asp-validation-for="EngineId" class="text-red-500 text-xs italic"></span>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Basic Settings Column -->
+            <div>
+                <h3 class="text-lg font-semibold text-white mb-4">Basic Settings</h3>
+
+                <div class="mb-4">
+                    <label asp-for="EngineId" class="block text-gray-300 text-sm font-bold mb-2">Chess Engine</label>
+                    <select asp-for="EngineId" asp-items="@(new SelectList(Model.Engines, "Id", "Name"))" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline">
+                        <option value="">Select an Engine</option>
+                    </select>
+                    <span asp-validation-for="EngineId" class="text-red-500 text-xs italic"></span>
+                </div>
+
+                <div class="mb-4">
+                    <label asp-for="MovetimeMs" class="block text-gray-300 text-sm font-bold mb-2">Move Time (milliseconds)</label>
+                    <input asp-for="MovetimeMs" type="number" min="1" max="60000" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline" />
+                    <span class="text-gray-400 text-xs">Time allowed per move (100ms - 60s)</span>
+                    <span asp-validation-for="MovetimeMs" class="text-red-500 text-xs italic block"></span>
+                </div>
+
+                <div class="mb-4">
+                    <label asp-for="TotalGames" class="block text-gray-300 text-sm font-bold mb-2">Number of Games</label>
+                    <input asp-for="TotalGames" type="number" min="1" max="10000" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline" />
+                    <span asp-validation-for="TotalGames" class="text-red-500 text-xs italic"></span>
+                </div>
+            </div>
+
+            <!-- Engine Parameters Column -->
+            <div>
+                <h3 class="text-lg font-semibold text-white mb-4">Engine Parameters</h3>
+
+                <div class="mb-4">
+                    <label asp-for="Threads" class="block text-gray-300 text-sm font-bold mb-2">Threads</label>
+                    <input asp-for="Threads" type="number" min="1" max="128" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline" />
+                    <span class="text-gray-400 text-xs">Number of CPU threads to use (Available: @Environment.ProcessorCount)</span>
+                    <span asp-validation-for="Threads" class="text-red-500 text-xs italic block"></span>
+                </div>
+
+                <div class="mb-4">
+                    <label asp-for="HashSizeMB" class="block text-gray-300 text-sm font-bold mb-2">Hash Size (MB)</label>
+                    <input asp-for="HashSizeMB" type="number" min="16" max="32768" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline" />
+                    <span class="text-gray-400 text-xs">Memory for transposition table</span>
+                    <span asp-validation-for="HashSizeMB" class="text-red-500 text-xs italic block"></span>
+                </div>
+
+                <div class="mb-4">
+                    <label asp-for="MultiPV" class="block text-gray-300 text-sm font-bold mb-2">MultiPV</label>
+                    <input asp-for="MultiPV" type="number" min="1" max="5" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline" />
+                    <span class="text-gray-400 text-xs">Number of principal variations to calculate</span>
+                    <span asp-validation-for="MultiPV" class="text-red-500 text-xs italic block"></span>
+                </div>
+
+                <div class="mb-4">
+                    <label asp-for="Contempt" class="block text-gray-300 text-sm font-bold mb-2">Contempt</label>
+                    <input asp-for="Contempt" type="number" min="-100" max="100" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline" />
+                    <span class="text-gray-400 text-xs">Draw avoidance (-100 to 100)</span>
+                    <span asp-validation-for="Contempt" class="text-red-500 text-xs italic block"></span>
+                </div>
+
+                <div class="mb-4">
+                    <label class="flex items-center text-gray-300">
+                        <input asp-for="UseNNUE" type="checkbox" class="mr-2 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-2" />
+                        <span class="text-sm font-bold">Use NNUE (Neural Network)</span>
+                    </label>
+                    <span class="text-gray-400 text-xs block ml-6">Enable neural network evaluation if supported</span>
+                </div>
+            </div>
         </div>
-        <div class="mb-4">
-            <label asp-for="MovetimeMs" class="block text-gray-300 text-sm font-bold mb-2">Move Time (milliseconds)</label>
-            <input asp-for="MovetimeMs" type="number" min="1" max="60000" value="1000" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline" />
-            <span class="text-gray-400 text-xs">Time allowed per move (100ms - 60s)</span>
-            <span asp-validation-for="MovetimeMs" class="text-red-500 text-xs italic block"></span>
-        </div>
-        <div class="mb-6">
-            <label asp-for="TotalGames" class="block text-gray-300 text-sm font-bold mb-2">Number of Games</label>
-            <input asp-for="TotalGames" type="number" min="1" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline" />
-            <span asp-validation-for="TotalGames" class="text-red-500 text-xs italic"></span>
-        </div>
-        <div class="flex items-center justify-between">
-            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+
+        <div class="flex items-center justify-between mt-6 pt-6 border-t border-gray-700">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline">
                 Start Generation
             </button>
             <a asp-action="Index" asp-controller="Home" class="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800">
@@ -36,3 +88,16 @@
         </div>
     </form>
 </div>
+
+<script>
+    // Auto-adjust thread count based on available processors
+    document.addEventListener('DOMContentLoaded', function() {
+        const threadsInput = document.getElementById('@Html.IdFor(m => m.Threads)');
+        const availableCores = @Environment.ProcessorCount;
+
+        // If threads value is still default (1), suggest half of available cores
+        if (threadsInput && threadsInput.value == '1' && availableCores > 2) {
+            threadsInput.value = Math.max(1, Math.floor(availableCores / 2));
+        }
+    });
+</script>

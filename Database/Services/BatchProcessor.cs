@@ -46,8 +46,8 @@ namespace Database.Services
             IsRunning = true;
             _cancellationTokenSource = new CancellationTokenSource();
 
-            // Create engine instance once for the entire batch
-            _engineInstance = await _engineService.CreateEngineInstanceAsync(_batch.Engine.FilePath);
+            // Create engine instance once for the entire batch, passing the parameters
+            _engineInstance = await _engineService.CreateEngineInstanceAsync(_batch.Engine.FilePath, _batch.Parameters);
 
             _processingTask = ProcessBatchAsync(_cancellationTokenSource.Token);
         }
@@ -173,7 +173,7 @@ namespace Database.Services
 
                     // Check if the position is checkmate based on evaluation
                     // Mate evaluations are typically 10000 - moves_to_mate
-                    if (Math.Abs(analysis.Evaluation) >= 9990)
+                    if (Math.Abs(analysis.Evaluation) >= 9999)
                     {
                         // Store the final position
                         moves.Add(new ChessMove

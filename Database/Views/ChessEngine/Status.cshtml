@@ -31,7 +31,7 @@
                         <tr class="bg-gray-700">
                             <th class="py-3 px-4 text-left">Batch ID</th>
                             <th class="py-3 px-4 text-left">Engine</th>
-                            <th class="py-3 px-4 text-left">Move Time</th>
+                            <th class="py-3 px-4 text-left">Settings</th>
                             <th class="py-3 px-4 text-left">Progress</th>
                             <th class="py-3 px-4 text-left">Status</th>
                             <th class="py-3 px-4 text-left">Created</th>
@@ -46,7 +46,27 @@
                                     <span class="font-mono text-sm">@batch.BatchId.Substring(0, 8)...</span>
                                 </td>
                                 <td class="py-3 px-4">@(batch.Engine?.Name ?? "Unknown")</td>
-                                <td class="py-3 px-4">@batch.MovetimeMs ms</td>
+                                <td class="py-3 px-4">
+                                    <div class="text-sm">
+                                        <div>Time: @batch.MovetimeMs ms</div>
+                                        @{
+                                            try
+                                            {
+                                                var parameters = System.Text.Json.JsonSerializer.Deserialize<dynamic>(batch.Parameters);
+                                                if (parameters != null)
+                                                {
+                                                    <div class="text-xs text-gray-400 mt-1">
+                                                        Threads: @parameters.GetProperty("Threads") | Hash: @parameters.GetProperty("Hash")MB
+                                                    </div>
+                                                }
+                                            }
+                                            catch
+                                            {
+                                                <!-- Parameters not parseable -->
+                                            }
+                                        }
+                                    </div>
+                                </td>
                                 <td class="py-3 px-4">
                                     <div class="flex items-center">
                                         <div class="w-32 bg-gray-700 rounded-full h-3 mr-3">

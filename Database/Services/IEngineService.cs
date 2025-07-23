@@ -6,7 +6,7 @@ namespace Database.Services
 {
     public interface IEngineService
     {
-        Task<IEngineInstance> CreateEngineInstanceAsync(string enginePath);
+        Task<IEngineInstance> CreateEngineInstanceAsync(string enginePath, string parametersJson = null);
         Task<IBatchProcessor> CreateBatchProcessorAsync(Batch batch);
     }
 
@@ -14,9 +14,9 @@ namespace Database.Services
     {
         string EnginePath { get; }
         bool IsReady { get; }
-        Task InitializeAsync();
-        Task<string> GetBestMoveAsync(string fen, long movetimeMs); // Changed parameter
-        Task<EngineAnalysis> AnalyzePositionAsync(string fen, long movetimeMs); // Changed parameter
+        Task InitializeAsync(string parametersJson = null);
+        Task<string> GetBestMoveAsync(string fen, long movetimeMs);
+        Task<EngineAnalysis> AnalyzePositionAsync(string fen, long movetimeMs);
         Task QuitAsync();
     }
 
