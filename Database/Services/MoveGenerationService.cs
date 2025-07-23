@@ -1,15 +1,8 @@
 ﻿using Database.Context;
 using Database.Hubs;
 using Database.Models;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Abstractions;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
-using Microsoft.AspNetCore.Mvc.Razor;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-
 
 namespace Database.Services
 {
@@ -47,8 +40,6 @@ namespace Database.Services
                         pendingBatch.Status = "InProgress";
                         await context.SaveChangesAsync(stoppingToken);
                         await BroadcastDashboardUpdate(context);
-                        await BroadcastActiveGamesUpdate(context);
-
 
                         try
                         {
@@ -64,7 +55,6 @@ namespace Database.Services
 
                         await context.SaveChangesAsync(stoppingToken);
                         await BroadcastDashboardUpdate(context);
-                        await BroadcastActiveGamesUpdate(context);
                         _logger.LogInformation($"Batch {pendingBatch.BatchId} finished.");
                     }
                 }
@@ -92,7 +82,7 @@ namespace Database.Services
                 chessService.NewGame();
                 int moveCount = 0;
 
-                while (!chessService.IsCheckmate() && !chessService.IsStalemate() && moveCount < (batch.Depth * 20)) // Increased move limit
+                while (!chessService.IsCheckmate() && !chessService.IsStalemate() && moveCount < (batch.Depth * 20))
                 {
                     var fen = chessService.GetFen();
                     var bestMoveStr = await engineService.GetBestMoveAsync(fen, batch.Engine.FilePath, (int)batch.Depth);
@@ -118,21 +108,19 @@ namespace Database.Services
                 game.MoveCount = moveCount;
                 if (chessService.IsCheckmate())
                 {
-                    game.Result = chessService.Turn == Player.White ? "0-1" : "1-0"; // The player whose turn it is has been checkmated
+                    game.Result = chessService.Turn == Player.White ? "0-1" : "1-0";
                 }
                 else
                 {
-                    game.Result = "1/2-1/2"; // Stalemate or other draw condition
+                    game.Result = "1/2-1/2";
                 }
-
 
                 context.ChessGames.Add(game);
                 await context.SaveChangesAsync(stoppingToken);
 
-                // Update dashboard after each game
+                // Update dashboard after each game with simple data
                 await BroadcastDashboardUpdate(context);
-                var activeBatches = await context.Batches.Where(b => b.Status == "InProgress").Include(b => b.Engine).Include(b => b.Games).ToListAsync(stoppingToken);
-                await BroadcastActiveGamesUpdate(context, activeBatches);
+                await BroadcastProgressUpdate(batch.Id, i + 1, batch.TotalGames);
             }
         }
 
@@ -145,56 +133,9 @@ namespace Database.Services
             await _hubContext.Clients.All.SendAsync("ReceiveDashboardUpdate", new { totalGames, totalMoves, activeGenerations });
         }
 
-        private async Task BroadcastActiveGamesUpdate(MainContext context, List<Batch> activeBatches = null)
+        private async Task BroadcastProgressUpdate(long batchId, long currentGames, long totalGames)
         {
-            if (activeBatches == null)
-            {
-                activeBatches = await context.Batches
-                   .Where(b => b.Status == "InProgress")
-                   .Include(b => b.Engine)
-                   .Include(b => b.Games)
-                   .ToListAsync();
-            }
-
-            var viewHtml = await RenderPartialViewToString("Views/Home/_ActiveGamesPartial.cshtml", activeBatches);
-            await _hubContext.Clients.All.SendAsync("ReceiveActiveGamesUpdate", viewHtml);
-        }
-
-        // Helper to render partial view to string
-        private async Task<string> RenderPartialViewToString(string viewName, object model)
-        {
-            using (var scope = _serviceProvider.CreateScope())
-            {
-                var httpContext = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
-                var actionContext = new ActionContext(httpContext, new RouteData(), new ActionDescriptor());
-
-                var viewEngine = scope.ServiceProvider.GetRequiredService<IRazorViewEngine>();
-                var viewResult = viewEngine.FindView(actionContext, viewName, false);
-
-                if (viewResult.View == null)
-                {
-                    _logger.LogError($"Could not find view '{viewName}'");
-                    return string.Empty;
-                }
-
-                using (var sw = new StringWriter())
-                {
-                    var viewData = new ViewDataDictionary(new EmptyModelMetadataProvider(), new ModelStateDictionary()) { Model = model };
-                    var tempData = new TempDataDictionary(actionContext.HttpContext, scope.ServiceProvider.GetRequiredService<ITempDataProvider>());
-
-                    var viewContext = new ViewContext(
-                        actionContext,
-                        viewResult.View,
-                        viewData,
-                        tempData,
-                        sw,
-                        new HtmlHelperOptions()
-                    );
-
-                    await viewResult.View.RenderAsync(viewContext);
-                    return sw.ToString();
-                }
-            }
+            await _hubContext.Clients.All.SendAsync("ReceiveProgressUpdate", new { batchId, currentGames, totalGames });
         }
     }
 }

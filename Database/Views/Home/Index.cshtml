@@ -58,8 +58,15 @@
             document.getElementById('activeGenerations').innerText = update.activeGenerations;
         });
 
-        connection.on("ReceiveActiveGamesUpdate", (html) => {
-            document.getElementById('activeGamesContainer').innerHTML = html;
+        connection.on("ReceiveProgressUpdate", (update) => {
+            // Find the row with this batch ID and update the progress
+            const row = document.querySelector(`tr[data-batch-id="${update.batchId}"]`);
+            if (row) {
+                const progressCell = row.querySelector('.progress-cell');
+                if (progressCell) {
+                    progressCell.innerText = `${update.currentGames} / ${update.totalGames}`;
+                }
+            }
         });
 
         start();

@@ -23,6 +23,7 @@ namespace Database.Controllers
             var activeBatches = await _context.Batches
                 .Where(b => b.Status == "InProgress")
                 .Include(b => b.Engine)
+                .Include(b => b.Games)
                 .ToListAsync();
 
             ViewBag.TotalGames = totalGames;

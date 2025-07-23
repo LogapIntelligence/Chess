@@ -84,13 +84,26 @@ namespace Database.Controllers
             {
                 if (viewModel.EngineFile != null && viewModel.EngineFile.Length > 0)
                 {
+                    // Validate file extension
+                    var allowedExtensions = new[] { ".exe", ".bat", ".cmd" }; // Add other allowed extensions
+                    var extension = Path.GetExtension(viewModel.EngineFile.FileName).ToLowerInvariant();
+
+                    if (!allowedExtensions.Contains(extension))
+                    {
+                        ModelState.AddModelError("EngineFile", "Invalid file type. Please upload an executable file.");
+                        ViewData["Title"] = "Upload Chess Engine";
+                        return View(viewModel);
+                    }
+
                     var enginesDir = Path.Combine(_environment.ContentRootPath, "ChessEngines");
                     if (!Directory.Exists(enginesDir))
                     {
                         Directory.CreateDirectory(enginesDir);
                     }
 
-                    var filePath = Path.Combine(enginesDir, viewModel.EngineFile.FileName);
+                    // Create a unique filename to prevent conflicts
+                    var uniqueFileName = $"{Guid.NewGuid()}_{viewModel.EngineFile.FileName}";
+                    var filePath = Path.Combine(enginesDir, uniqueFileName);
 
                     using (var stream = new FileStream(filePath, FileMode.Create))
                     {

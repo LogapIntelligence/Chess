@@ -1,4 +1,5 @@
 using Database.Context;
+using Database.Hubs;
 using Database.Services;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
@@ -54,5 +55,7 @@ app.UseAuthorization();
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
+
+app.MapHub<DashboardHub>("/dashboardHub");
 
 app.Run();

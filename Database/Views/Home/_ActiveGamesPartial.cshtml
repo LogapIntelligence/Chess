@@ -1,6 +1,6 @@
 ﻿@model IEnumerable<Database.Models.Batch>
 
-@if (Model.Any())
+@if (Model != null && Model.Any())
 {
     <div class="overflow-x-auto">
         <table class="min-w-full bg-gray-800 text-white">
@@ -9,18 +9,23 @@
                     <th class="py-3 px-4 text-left">Batch ID</th>
                     <th class="py-3 px-4 text-left">Engine</th>
                     <th class="py-3 px-4 text-left">Depth</th>
-                    <th class="py-3 px-4 text-left">Games</th>
+                    <th class="py-3 px-4 text-left">Progress</th>
                     <th class="py-3 px-4 text-left">Status</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach (var batch in Model)
                 {
-                    <tr class="border-b border-gray-700">
+                    <tr class="border-b border-gray-700" data-batch-id="@batch.Id">
                         <td class="py-3 px-4">@batch.BatchId</td>
-                        <td class="py-3 px-4">@batch.Engine.Name</td>
+                        <td class="py-3 px-4">@(batch.Engine?.Name ?? "Unknown")</td>
                         <td class="py-3 px-4">@batch.Depth</td>
-                        <td class="py-3 px-4">@batch.Games.Count() / @batch.TotalGames</td>
+                        <td class="py-3 px-4 progress-cell">
+                            @{
+                                var gamesCount = batch.Games?.Count() ?? 0;
+                            }
+                            @gamesCount / @batch.TotalGames
+                        </td>
                         <td class="py-3 px-4">
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-800 text-green-100">
                                 @batch.Status
