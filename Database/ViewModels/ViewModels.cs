@@ -18,7 +18,7 @@ namespace Database.ViewModels
         [Required]
         [Range(1, 10000)]
         [Display(Name = "Number of Games")]
-        public long TotalGames { get; set; } = 10;
+        public long TotalGames { get; set; } = 1000;
 
         // Engine parameters
         [Range(1, 128)]
@@ -27,7 +27,7 @@ namespace Database.ViewModels
 
         [Range(16, 32768)]
         [Display(Name = "Hash Size (MB)")]
-        public int HashSizeMB { get; set; } = 128;
+        public int HashSizeMB { get; set; } = 512;
 
         [Display(Name = "MultiPV")]
         [Range(1, 5)]

@@ -195,19 +195,16 @@ namespace Database.Services
                             Depth = analysis.Depth,
                             ZobristHash = ComputeZobristHash(fen)
                         };
-                        moves.Add(finalMove);
 
-                        // Determine winner based on evaluation and whose turn it is
-                        var fenParts = fen.Split(' ');
-                        bool isWhiteToMove = fenParts.Length > 1 && fenParts[1] == "w";
+                        // no need to process last move 
 
                         if (analysis.Evaluation > 9990)
                         {
-                            gameResult = isWhiteToMove ? "1-0" : "0-1";
+                            gameResult = "1-0";
                         }
                         else
                         {
-                            gameResult = isWhiteToMove ? "0-1" : "1-0";
+                            gameResult = "0-1";
                         }
 
                         gameEnded = true;

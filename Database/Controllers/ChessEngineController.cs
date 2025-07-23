@@ -37,10 +37,10 @@ namespace Database.Controllers
             {
                 Engines = await _context.Engines.Where(e => e.IsActive).ToListAsync(),
                 // Set default values
-                MovetimeMs = 1000,
-                TotalGames = 10,
-                Threads = Environment.ProcessorCount, // Use half of available cores by default
-                HashSizeMB = 128,
+                MovetimeMs = 50,
+                TotalGames = 1000,
+                Threads = 1,
+                HashSizeMB = 512,
                 MultiPV = 1,
                 UseNNUE = true,
                 Contempt = 0

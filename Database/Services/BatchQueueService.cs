@@ -4,16 +4,8 @@ using Database.Hubs;
 using Database.Models;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Database.Services
 {
@@ -25,7 +17,7 @@ namespace Database.Services
         private readonly ConcurrentQueue<Batch> _batchQueue = new();
         private readonly List<IBatchProcessor> _activeProcessors = new();
         private readonly SemaphoreSlim _processorSemaphore;
-        private int _maxConcurrentProcessors = 2;
+        private int _maxConcurrentProcessors = 10;
         private readonly IOptions<BatchProcessingOptions> _options;
 
         public BatchQueueService(

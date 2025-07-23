@@ -17,7 +17,7 @@
                 <div class="mb-4">
                     <label asp-for="EngineId" class="block text-gray-300 text-sm font-bold mb-2">Chess Engine</label>
                     <select asp-for="EngineId" asp-items="@(new SelectList(Model.Engines, "Id", "Name"))" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline">
-                        <option value="">Select an Engine</option>
+
                     </select>
                     <span asp-validation-for="EngineId" class="text-red-500 text-xs italic"></span>
                 </div>
@@ -90,14 +90,5 @@
 </div>
 
 <script>
-    // Auto-adjust thread count based on available processors
-    document.addEventListener('DOMContentLoaded', function() {
-        const threadsInput = document.getElementById('@Html.IdFor(m => m.Threads)');
-        const availableCores = @Environment.ProcessorCount;
 
-        // If threads value is still default (1), suggest half of available cores
-        if (threadsInput && threadsInput.value == '1' && availableCores > 2) {
-            threadsInput.value = Math.max(1, Math.floor(availableCores / 2));
-        }
-    });
 </script>

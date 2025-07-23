@@ -48,7 +48,6 @@ namespace Database.Controllers
                         .OrderBy(g => g.Id)
                         .Skip(skip)
                         .Take(batchSize)
-                        .Where(x=>x.Result == "*")
                         .ToListAsync();
 
                     foreach (var game in games)
