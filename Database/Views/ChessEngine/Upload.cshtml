@@ -1,0 +1,35 @@
+﻿@model Database.ViewModels.UploadEngineViewModel
+
+@{
+    ViewData["Title"] = "Upload Engine";
+}
+
+<div class="max-w-2xl mx-auto bg-gray-800 p-8 rounded-lg shadow-lg">
+    <h2 class="text-2xl font-bold text-white mb-6">Upload New Chess Engine</h2>
+    <form asp-action="Upload" method="post" enctype="multipart/form-data">
+        @Html.AntiForgeryToken()
+        <div class="mb-4">
+            <label asp-for="Name" class="block text-gray-300 text-sm font-bold mb-2">Engine Name</label>
+            <input asp-for="Name" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline" />
+            <span asp-validation-for="Name" class="text-red-500 text-xs italic"></span>
+        </div>
+        <div class="mb-6">
+            <label asp-for="EngineFile" class="block text-gray-300 text-sm font-bold mb-2">Engine Executable</label>
+            <input asp-for="EngineFile" type="file" class="block w-full text-sm text-gray-400
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-full file:border-0
+                file:text-sm file:font-semibold
+                file:bg-blue-50 file:text-blue-700
+                hover:file:bg-blue-100" />
+            <span asp-validation-for="EngineFile" class="text-red-500 text-xs italic"></span>
+        </div>
+        <div class="flex items-center justify-between">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                Upload Engine
+            </button>
+            <a asp-action="Index" asp-controller="Home" class="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800">
+                Cancel
+            </a>
+        </div>
+    </form>
+</div>

@@ -1,0 +1,67 @@
+﻿@model IEnumerable<Database.Models.Batch>
+
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<div class="container mx-auto">
+    <!-- Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+            <h3 class="text-lg font-medium text-gray-400">Total Generated Games</h3>
+            <p class="text-3xl font-bold text-white" id="totalGames">@ViewBag.TotalGames</p>
+        </div>
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+            <h3 class="text-lg font-medium text-gray-400">Total Generated Moves</h3>
+            <p class="text-3xl font-bold text-white" id="totalMoves">@ViewBag.TotalMoves</p>
+        </div>
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+            <h3 class="text-lg font-medium text-gray-400">Active Generations</h3>
+            <p class="text-3xl font-bold text-white" id="activeGenerations">@ViewBag.ActiveGenerations</p>
+        </div>
+    </div>
+
+    <!-- Active Game Generations -->
+    <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+        <h2 class="text-xl font-semibold mb-4 text-white">Live Game Generations</h2>
+        <div id="activeGamesContainer">
+            @await Html.PartialAsync("_ActiveGamesPartial", Model)
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
+    <script>
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/dashboardHub")
+            .configureLogging(signalR.LogLevel.Information)
+            .build();
+
+        async function start() {
+            try {
+                await connection.start();
+                console.log("SignalR Connected.");
+            } catch (err) {
+                console.log(err);
+                setTimeout(start, 5000);
+            }
+        };
+
+        connection.onclose(async () => {
+            await start();
+        });
+
+        connection.on("ReceiveDashboardUpdate", (update) => {
+            document.getElementById('totalGames').innerText = update.totalGames;
+            document.getElementById('totalMoves').innerText = update.totalMoves;
+            document.getElementById('activeGenerations').innerText = update.activeGenerations;
+        });
+
+        connection.on("ReceiveActiveGamesUpdate", (html) => {
+            document.getElementById('activeGamesContainer').innerHTML = html;
+        });
+
+        start();
+    </script>
+}

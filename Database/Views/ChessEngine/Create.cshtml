@@ -1,0 +1,37 @@
+﻿@model Database.ViewModels.CreateBatchViewModel
+
+@{
+    ViewData["Title"] = "New Generation Batch";
+}
+
+<div class="max-w-2xl mx-auto bg-gray-800 p-8 rounded-lg shadow-lg">
+    <h2 class="text-2xl font-bold text-white mb-6">Create New Generation Batch</h2>
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+        <div class="mb-4">
+            <label asp-for="EngineId" class="block text-gray-300 text-sm font-bold mb-2">Chess Engine</label>
+            <select asp-for="EngineId" asp-items="@(new SelectList(Model.Engines, "Id", "Name"))" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline">
+                <option value="">Select an Engine</option>
+            </select>
+            <span asp-validation-for="EngineId" class="text-red-500 text-xs italic"></span>
+        </div>
+        <div class="mb-4">
+            <label asp-for="Depth" class="block text-gray-300 text-sm font-bold mb-2">Search Depth</label>
+            <input asp-for="Depth" type="number" min="1" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline" />
+            <span asp-validation-for="Depth" class="text-red-500 text-xs italic"></span>
+        </div>
+        <div class="mb-6">
+            <label asp-for="TotalGames" class="block text-gray-300 text-sm font-bold mb-2">Number of Games</label>
+            <input asp-for="TotalGames" type="number" min="1" class="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline" />
+            <span asp-validation-for="TotalGames" class="text-red-500 text-xs italic"></span>
+        </div>
+        <div class="flex items-center justify-between">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                Start Generation
+            </button>
+            <a asp-action="Index" asp-controller="Home" class="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800">
+                Cancel
+            </a>
+        </div>
+    </form>
+</div>
