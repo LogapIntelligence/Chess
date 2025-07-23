@@ -90,6 +90,9 @@ namespace Database.Services
             // Halfmove clock and fullmove number
             _halfMoveClock = parts.Length > 4 ? int.Parse(parts[4]) : 0;
             _fullMoveNumber = parts.Length > 5 ? int.Parse(parts[5]) : 1;
+
+            // Check for draw conditions after loading position
+            CheckDrawConditions();
         }
 
         public string GetFen()

@@ -149,7 +149,25 @@ namespace Database.Services
                 {
                     var fen = chessService.GetFen();
 
-                    // Get best move from engine
+                    // Check if game is already over BEFORE asking engine for a move
+                    if (chessService.IsGameOver)
+                    {
+                        gameResult = chessService.GameResult;
+                        gameEnded = true;
+                        _logger.LogInformation($"Game ended by rule: {gameResult} after {moveNumber} moves");
+
+                        // Store the final position
+                        moves.Add(new ChessMove
+                        {
+                            MoveNumber = moveNumber + 1,
+                            Fen = fen,
+                            Evaluation = 0, // Draw evaluation for rule-based draws
+                            ZobristHash = ComputeZobristHash(fen)
+                        });
+                        break;
+                    }
+
+                    // Get best move from engine only if game is not over
                     var analysis = await _engineInstance.AnalyzePositionAsync(fen, (int)_batch.Depth);
 
                     // Check if the position is checkmate based on evaluation
@@ -226,7 +244,7 @@ namespace Database.Services
                         ZobristHash = ComputeZobristHash(chessService.GetFen())
                     });
 
-                    // Check if ChessService detected a draw
+                    // Check if ChessService detected a draw after the move
                     if (chessService.IsGameOver)
                     {
                         gameResult = chessService.GameResult;
@@ -247,7 +265,7 @@ namespace Database.Services
                     // Log progress
                     if (moveNumber % 50 == 0)
                     {
-                        _logger.LogDebug($"Game in progress: {moveNumber} moves");
+                        _logger.LogDebug($"Game in progress: {moveNumber} moves, halfmove clock: {fen.Split(' ')[4]}");
                     }
                 }
 
@@ -272,7 +290,6 @@ namespace Database.Services
         private long ComputeZobristHash(string fen)
         {
             // Simple hash function for demonstration
-            // In production, implement proper Zobrist hashing
             return fen.GetHashCode();
         }
 

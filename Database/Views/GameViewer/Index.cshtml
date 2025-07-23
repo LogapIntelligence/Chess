@@ -1,0 +1,552 @@
+﻿@model Database.Models.ChessGame
+
+@{
+    ViewData["Title"] = "Game Viewer";
+}
+
+<div class="container-fluid">
+    <div class="flex gap-6">
+        <!-- Left side: Chess board and controls -->
+        <div class="flex-1">
+            <!-- Chess Board -->
+            <div class="bg-gray-800 p-4 rounded-lg shadow-lg mb-4">
+                <div id="chessboard" class="relative mx-auto" style="width: 480px; height: 480px;">
+                    <!-- Board will be rendered here -->
+                </div>
+            </div>
+
+            <!-- Move Controls -->
+            <div class="bg-gray-800 p-4 rounded-lg shadow-lg text-center">
+                <div class="flex items-center justify-center gap-4 mb-4">
+                    <button id="firstMove" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded" title="First move">
+                        <i class="fas fa-fast-backward"></i>
+                    </button>
+                    <button id="prevMove" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded" title="Previous move">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <span id="moveDisplay" class="text-white font-mono mx-4">Move 0 / 0</span>
+                    <button id="nextMove" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded" title="Next move">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                    <button id="lastMove" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded" title="Last move">
+                        <i class="fas fa-fast-forward"></i>
+                    </button>
+                </div>
+                <div class="text-white">
+                    <span class="font-semibold">Result:</span>
+                    <span id="gameResult" class="font-mono">@(Model?.Result ?? "-")</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right side: Search and game info -->
+        <div class="w-96">
+            <!-- Search Bar -->
+            <div class="bg-gray-800 p-4 rounded-lg shadow-lg mb-4">
+                <div class="mb-3">
+                    <button id="randomGame" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mb-3">
+                        <i class="fas fa-random mr-2"></i>Load Random Game
+                    </button>
+                </div>
+                <div class="relative">
+                    <input type="text" id="searchInput" placeholder="Search games..."
+                           class="w-full bg-gray-700 text-white px-4 py-2 pr-10 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <button id="searchButton" class="absolute right-2 top-2 text-gray-400 hover:text-white">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+                <div id="searchResults" class="mt-4 max-h-96 overflow-y-auto hidden">
+                    <!-- Search results will appear here -->
+                </div>
+            </div>
+
+            <!-- Game Info -->
+            <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
+                <h3 class="text-lg font-semibold text-white mb-3">Game Information</h3>
+                <div class="text-gray-300 space-y-2">
+                    <div><span class="font-semibold">Game ID:</span> <span id="gameId">@(Model?.Id.ToString() ?? "-")</span></div>
+                    <div><span class="font-semibold">Total Moves:</span> <span id="totalMoves">@(Model?.MoveCount.ToString() ?? "-")</span></div>
+                    <div>
+                        <span class="font-semibold">Current Eval:</span>
+                        <span id="currentEval" class="font-mono">0.00</span>
+                        <span id="advantageIndicator" class="ml-2"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Evaluation Graph -->
+    <div class="bg-gray-800 p-4 rounded-lg shadow-lg mt-6">
+        <div class="flex justify-between items-center mb-2">
+            <h3 class="text-lg font-semibold text-white">Evaluation Graph</h3>
+            <div class="text-sm text-gray-400">
+                <span class="inline-block w-3 h-3 bg-white bg-opacity-20 rounded mr-1"></span>White advantage
+                <span class="inline-block w-3 h-3 bg-black bg-opacity-40 rounded ml-3 mr-1"></span>Black advantage
+            </div>
+        </div>
+        <!-- Fixed: Wrap canvas in a div with fixed height instead of using width/height attributes -->
+        <div style="position: relative; height: 350px;">
+            <canvas id="evalChart"></canvas>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // Game state
+        let currentGame = null;
+        let currentMoveIndex = 0;
+        let evalChart = null;
+
+        // Initialize with server-rendered game if available
+        @if (Model != null && Model.Moves != null && Model.Moves.Any())
+        {
+                    <text>
+                    currentGame = {
+                        id: @Model.Id,
+                        result: '@Model.Result',
+                        moveCount: @Model.MoveCount,
+                        moves: [
+                            @foreach (var move in Model.Moves.OrderBy(m => m.MoveNumber))
+                            {
+                                        <text>
+                                        {
+                                            moveNumber: @move.MoveNumber,
+                                            fen: '@move.Fen',
+                                            evaluation: @move.Evaluation.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+                                        },
+                                        </text>
+                            }
+                        ]
+                    };
+                    </text>
+        }
+
+        // Chess board rendering
+        function renderBoard(fen) {
+            const board = document.getElementById('chessboard');
+            board.innerHTML = '';
+
+            // Create board squares
+            for (let row = 7; row >= 0; row--) {
+                for (let col = 0; col < 8; col++) {
+                    const square = document.createElement('div');
+                    square.className = 'absolute';
+                    square.style.width = '60px';
+                    square.style.height = '60px';
+                    square.style.left = (col * 60) + 'px';
+                    square.style.top = ((7 - row) * 60) + 'px';
+
+                    // Alternate colors
+                    if ((row + col) % 2 === 0) {
+                        square.style.background = "rgb(221 221 221)";
+                    } else {
+                        square.style.background = "rgb(100 110 129)";
+                    }
+
+                    board.appendChild(square);
+                }
+            }
+
+            // Parse FEN and place pieces
+            if (!fen) return;
+
+            const fenParts = fen.split(' ');
+            const position = fenParts[0];
+            let row = 7;
+            let col = 0;
+
+            for (let char of position) {
+                if (char === '/') {
+                    row--;
+                    col = 0;
+                } else if (char >= '1' && char <= '8') {
+                    col += parseInt(char);
+                } else {
+                    // Place piece
+                    const piece = document.createElement('img');
+                    piece.className = 'absolute';
+                    piece.style.width = '60px';
+                    piece.style.height = '60px';
+                    piece.style.left = (col * 60) + 'px';
+                    piece.style.top = ((7 - row) * 60) + 'px';
+
+                    // Get piece image
+                    const isWhite = char === char.toUpperCase();
+                    const pieceType = char.toLowerCase();
+                    const color = isWhite ? 'l' : 'd';
+                    const pieceName = {
+                        'k': 'k',
+                        'q': 'q',
+                        'r': 'r',
+                        'b': 'b',
+                        'n': 'n',
+                        'p': 'p'
+                    }[pieceType];
+
+                    piece.src = `/img/Chess_${pieceName}${color}t45.svg`;
+                    board.appendChild(piece);
+                    col++;
+                }
+            }
+        }
+
+        // Helper function to clamp evaluation values
+        function clampEval(value) {
+            return Math.max(-10, Math.min(10, value));
+        }
+
+        // Initialize evaluation chart
+        function initChart() {
+            const ctx = document.getElementById('evalChart').getContext('2d');
+
+            // Clamp evaluation values to -10 to 10 range
+            const data = currentGame ? currentGame.moves.map(m => clampEval(m.evaluation)) : [];
+            const labels = currentGame ? currentGame.moves.map(m => m.moveNumber.toString()) : [];
+
+            if (evalChart) {
+                evalChart.destroy();
+            }
+
+            // Create gradient for the line fill
+            const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)');    // White advantage (top)
+            gradient.addColorStop(0.5, 'rgba(128, 128, 128, 0.1)');  // Neutral (middle)
+            gradient.addColorStop(1, 'rgba(0, 0, 0, 0.3)');          // Black advantage (bottom)
+
+            evalChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Evaluation',
+                        data: data,
+                        borderColor: function(context) {
+                            const value = context.parsed?.y;
+                            if (value === undefined) return 'rgb(59, 130, 246)';
+
+                            // Different colors for white/black advantage
+                            if (value > 0.5) {
+                                return 'rgb(255, 255, 255)'; // White for white advantage
+                            } else if (value < -0.5) {
+                                return 'rgb(64, 64, 64)'; // Dark gray for black advantage
+                            } else {
+                                return 'rgb(156, 163, 175)'; // Gray for neutral
+                            }
+                        },
+                        backgroundColor: gradient,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 2,
+                        pointHoverRadius: 6,
+                        segment: {
+                            borderColor: function(ctx) {
+                                const prev = ctx.p0.parsed.y;
+                                const next = ctx.p1.parsed.y;
+                                const avg = (prev + next) / 2;
+
+                                // Color segments based on evaluation
+                                if (avg > 0.5) {
+                                    return 'rgb(255, 255, 255)'; // White for white advantage
+                                } else if (avg < -0.5) {
+                                    return 'rgb(64, 64, 64)'; // Dark gray for black advantage
+                                } else {
+                                    return 'rgb(156, 163, 175)'; // Gray for neutral
+                                }
+                            }
+                        }
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const originalValue = currentGame.moves[context.dataIndex].evaluation;
+                                    const displayValue = context.parsed.y;
+
+                                    // Show if value was clamped
+                                    if (originalValue > 10 || originalValue < -10) {
+                                        return `Eval: ${displayValue.toFixed(2)} (${originalValue > 0 ? 'Win' : 'Loss'})`;
+                                    }
+                                    return 'Eval: ' + displayValue.toFixed(2);
+                                }
+                            }
+                        },
+                        // Custom plugin to draw background zones
+                        beforeDraw: function(chart) {
+                            const ctx = chart.ctx;
+                            const chartArea = chart.chartArea;
+                            const yAxis = chart.scales.y;
+
+                            // Calculate the y position of 0
+                            const zeroY = yAxis.getPixelForValue(0);
+
+                            // White advantage zone (positive values)
+                            ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+                            ctx.fillRect(
+                                chartArea.left,
+                                chartArea.top,
+                                chartArea.right - chartArea.left,
+                                zeroY - chartArea.top
+                            );
+
+                            // Black advantage zone (negative values)
+                            ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+                            ctx.fillRect(
+                                chartArea.left,
+                                zeroY,
+                                chartArea.right - chartArea.left,
+                                chartArea.bottom - zeroY
+                            );
+
+                            // Draw a stronger zero line
+                            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                            ctx.lineWidth = 2;
+                            ctx.beginPath();
+                            ctx.moveTo(chartArea.left, zeroY);
+                            ctx.lineTo(chartArea.right, zeroY);
+                            ctx.stroke();
+                        }
+                    },
+                    scales: {
+                        y: {
+                            grid: {
+                                color: function(context) {
+                                    // Make zero line more visible
+                                    if (context.tick.value === 0) {
+                                        return 'rgba(255, 255, 255, 0.5)';
+                                    }
+                                    return 'rgba(255, 255, 255, 0.1)';
+                                },
+                                lineWidth: function(context) {
+                                    // Make zero line thicker
+                                    if (context.tick.value === 0) {
+                                        return 2;
+                                    }
+                                    return 1;
+                                }
+                            },
+                            ticks: {
+                                color: 'white',
+                                callback: function(value) {
+                                    return value.toFixed(1);
+                                }
+                            },
+                            // Fixed min and max at -10 and 10
+                            min: -10,
+                            max: 10
+                        },
+                        x: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'white',
+                                maxTicksLimit: 20
+                            }
+                        }
+                    },
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            goToMove(index);
+                        }
+                    }
+                }
+            });
+
+            updateChartMarker();
+        }
+
+        // Update chart with current move marker
+        function updateChartMarker() {
+            if (!evalChart || !currentGame) return;
+
+            // Highlight current move with appropriate colors
+            evalChart.data.datasets[0].pointBackgroundColor = function(context) {
+                const value = context.parsed?.y || 0;
+                const isCurrent = context.dataIndex === currentMoveIndex;
+
+                if (isCurrent) {
+                    return 'rgb(239, 68, 68)'; // Red for current position
+                }
+
+                // Match point colors to line colors
+                if (value > 0.5) {
+                    return 'rgb(255, 255, 255)'; // White for white advantage
+                } else if (value < -0.5) {
+                    return 'rgb(64, 64, 64)'; // Dark gray for black advantage
+                } else {
+                    return 'rgb(156, 163, 175)'; // Gray for neutral
+                }
+            };
+
+            evalChart.data.datasets[0].pointBorderColor = function(context) {
+                const value = context.parsed?.y || 0;
+                const isCurrent = context.dataIndex === currentMoveIndex;
+
+                if (isCurrent) {
+                    return 'rgb(239, 68, 68)'; // Red for current position
+                }
+
+                // Match point colors to line colors
+                if (value > 0.5) {
+                    return 'rgb(255, 255, 255)'; // White for white advantage
+                } else if (value < -0.5) {
+                    return 'rgb(64, 64, 64)'; // Dark gray for black advantage
+                } else {
+                    return 'rgb(156, 163, 175)'; // Gray for neutral
+                }
+            };
+
+            evalChart.data.datasets[0].pointRadius = function(context) {
+                return context.dataIndex === currentMoveIndex ? 6 : 2;
+            };
+
+            evalChart.update();
+        }
+
+        // Move navigation
+        function goToMove(index) {
+            if (!currentGame || index < 0 || index >= currentGame.moves.length) return;
+
+            currentMoveIndex = index;
+            const move = currentGame.moves[index];
+            renderBoard(move.fen);
+
+            document.getElementById('moveDisplay').textContent = `Move ${move.moveNumber} / ${currentGame.moveCount}`;
+
+            // Display the actual evaluation value, but indicate if it's a forced win/loss
+            const eval = move.evaluation;
+            let evalDisplay = '';
+            let advantageIndicator = '';
+
+            if (eval >= 9999) {
+                evalDisplay = 'M+'; // Mate for white
+                advantageIndicator = '<span class="text-white font-bold">⚪ White wins</span>';
+            } else if (eval <= -9999) {
+                evalDisplay = 'M-'; // Mate for black
+                advantageIndicator = '<span class="text-gray-900 bg-gray-300 px-1 rounded font-bold">⚫ Black wins</span>';
+            } else {
+                evalDisplay = eval.toFixed(2);
+                if (eval > 0.5) {
+                    advantageIndicator = '<span class="text-white">⚪ White advantage</span>';
+                } else if (eval < -0.5) {
+                    advantageIndicator = '<span class="text-gray-400">⚫ Black advantage</span>';
+                } else {
+                    advantageIndicator = '<span class="text-gray-500">≈ Equal position</span>';
+                }
+            }
+
+            document.getElementById('currentEval').textContent = evalDisplay;
+            document.getElementById('advantageIndicator').innerHTML = advantageIndicator;
+
+            updateChartMarker();
+        }
+
+        // Load game
+        async function loadGame(gameId) {
+            try {
+                const response = await fetch(`/GameViewer/GetGame?gameId=${gameId}`);
+                if (response.ok) {
+                    currentGame = await response.json();
+                    currentMoveIndex = 0;
+                    updateGameDisplay();
+                }
+            } catch (error) {
+                console.error('Error loading game:', error);
+            }
+        }
+
+        // Load random game
+        async function loadRandomGame() {
+            try {
+                const response = await fetch('/GameViewer/GetRandomGame');
+                if (response.ok) {
+                    currentGame = await response.json();
+                    currentMoveIndex = 0;
+                    updateGameDisplay();
+                }
+            } catch (error) {
+                console.error('Error loading random game:', error);
+            }
+        }
+
+        // Update game display
+        function updateGameDisplay() {
+            if (!currentGame) return;
+
+            document.getElementById('gameId').textContent = currentGame.id;
+            document.getElementById('totalMoves').textContent = currentGame.moveCount;
+            document.getElementById('gameResult').textContent = currentGame.result;
+
+            initChart();
+            goToMove(0);
+        }
+
+        // Search games
+        async function searchGames() {
+            const query = document.getElementById('searchInput').value;
+            const resultsDiv = document.getElementById('searchResults');
+
+            if (!query) {
+                resultsDiv.classList.add('hidden');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/GameViewer/SearchGames?query=${encodeURIComponent(query)}`);
+                if (response.ok) {
+                    const data = await response.json();
+
+                    resultsDiv.innerHTML = data.games.map(game => `
+                        <div class="bg-gray-700 p-3 rounded mb-2 cursor-pointer hover:bg-gray-600" onclick="loadGame(${game.id})">
+                            <div class="text-white font-semibold">Game #${game.id}</div>
+                            <div class="text-gray-300 text-sm">
+                                Result: ${game.result} | Moves: ${game.moveCount}
+                            </div>
+                        </div>
+                    `).join('');
+
+                    resultsDiv.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error searching games:', error);
+            }
+        }
+
+        // Event listeners
+        document.getElementById('firstMove').addEventListener('click', () => goToMove(0));
+        document.getElementById('prevMove').addEventListener('click', () => goToMove(currentMoveIndex - 1));
+        document.getElementById('nextMove').addEventListener('click', () => goToMove(currentMoveIndex + 1));
+        document.getElementById('lastMove').addEventListener('click', () => {
+            if (currentGame) goToMove(currentGame.moves.length - 1);
+        });
+        document.getElementById('randomGame').addEventListener('click', loadRandomGame);
+        document.getElementById('searchButton').addEventListener('click', searchGames);
+        document.getElementById('searchInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') searchGames();
+        });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') goToMove(currentMoveIndex - 1);
+            else if (e.key === 'ArrowRight') goToMove(currentMoveIndex + 1);
+            else if (e.key === 'Home') goToMove(0);
+            else if (e.key === 'End' && currentGame) goToMove(currentGame.moves.length - 1);
+        });
+
+        // Initialize on load
+        if (currentGame) {
+            updateGameDisplay();
+        }
+    </script>
+}
