@@ -31,44 +31,5 @@
 </div>
 
 @section Scripts {
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
-    <script>
-        const connection = new signalR.HubConnectionBuilder()
-            .withUrl("/dashboardHub")
-            .configureLogging(signalR.LogLevel.Information)
-            .build();
-
-        async function start() {
-            try {
-                await connection.start();
-                console.log("SignalR Connected.");
-            } catch (err) {
-                console.log(err);
-                setTimeout(start, 5000);
-            }
-        };
-
-        connection.onclose(async () => {
-            await start();
-        });
-
-        connection.on("ReceiveDashboardUpdate", (update) => {
-            document.getElementById('totalGames').innerText = update.totalGames;
-            document.getElementById('totalMoves').innerText = update.totalMoves;
-            document.getElementById('activeGenerations').innerText = update.activeGenerations;
-        });
-
-        connection.on("ReceiveProgressUpdate", (update) => {
-            // Find the row with this batch ID and update the progress
-            const row = document.querySelector(`tr[data-batch-id="${update.batchId}"]`);
-            if (row) {
-                const progressCell = row.querySelector('.progress-cell');
-                if (progressCell) {
-                    progressCell.innerText = `${update.currentGames} / ${update.totalGames}`;
-                }
-            }
-        });
-
-        start();
-    </script>
+    <!-- No need for SignalR connection here anymore - it's in _Layout.cshtml -->
 }

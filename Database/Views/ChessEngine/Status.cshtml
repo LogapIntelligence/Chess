@@ -142,34 +142,5 @@
                 }
             });
         }, 1000);
-
-        // Listen for real-time updates
-        if (typeof connection !== 'undefined') {
-            connection.on("ReceiveProgressUpdate", (update) => {
-                const row = document.querySelector(`tr[data-batch-id="${update.batchId}"]`);
-                if (row) {
-                    const progressBar = row.querySelector('.progress-bar');
-                    const progressText = row.querySelector('.progress-text');
-
-                    if (progressBar && progressText) {
-                        const percentage = (update.currentGames / update.totalGames) * 100;
-                        progressBar.style.width = `${percentage}%`;
-                        progressText.textContent = `${update.currentGames} / ${update.totalGames}`;
-                    }
-                }
-            });
-
-            connection.on("ReceiveDashboardUpdate", (update) => {
-                const queueLength = document.getElementById('queueLength');
-                const activeProcessors = document.getElementById('activeProcessors');
-
-                if (queueLength && update.queueLength !== undefined) {
-                    queueLength.textContent = update.queueLength;
-                }
-                if (activeProcessors && update.activeGenerations !== undefined) {
-                    activeProcessors.textContent = update.activeGenerations;
-                }
-            });
-        }
     </script>
 }
