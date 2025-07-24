@@ -1,11 +1,15 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 NNUE - Main module for chess position evaluation training
 """
 
 # Import all the main classes and functions
 from .nnue_trainer import (
+    NNUE,
+    TrainingConfig, 
+    HalfKPFeatures,
     DatabaseConnection,
+    ChessDataset,
     NNUETrainer
 )
 
@@ -15,7 +19,9 @@ from .model_eval import (
 )
 
 from .training_config import (
+    create_training_config,
     get_training_config,
+    TRAINING_PRESETS,
     validate_config
 )
 
