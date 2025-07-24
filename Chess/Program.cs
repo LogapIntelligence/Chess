@@ -11,7 +11,7 @@ class Program
         // Initialize magic bitboards and other static data
         Console.WriteLine("Initializing chess engine...");
 
-        NNUEConfig.NNUEPath = @"C:\\Users\\logap\\source\\repos\\Chess\\NNUE\\models\\test_nnue_final.nnue";
+        NNUEConfig.NNUEPath = @"C:\Users\logap\Downloads\nn-1ceb1ade0001.nnue";
         NNUEConfig.UseNNUE = true;  // Set to false to use classical evaluation
 
         // You can also set the path via command line argument

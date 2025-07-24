@@ -15,10 +15,6 @@ public class Search
     private readonly MoveOrdering _moveOrdering;
     private readonly Stopwatch _timer;
 
-    // NNUE evaluator
-    private readonly INNUEEvaluator? _nnueEvaluator;
-    private readonly bool _useNNUE;
-
     private long _nodes;
     private long _timeAllocated;
     private bool _stop;
@@ -44,39 +40,6 @@ public class Search
         _tt = new TranspositionTable(ttSizeMb);
         _moveOrdering = new MoveOrdering();
         _timer = new Stopwatch();
-
-        // Initialize NNUE if enabled
-        if (NNUEConfig.UseNNUE && !string.IsNullOrEmpty(NNUEConfig.NNUEPath))
-        {
-            // Try flexible loader first
-            if (FlexibleNNUELoader.TryLoadNNUE(NNUEConfig.NNUEPath, out var weights))
-            {
-                _nnueEvaluator = new SimpleNNUEEvaluator(weights);
-                _useNNUE = true;
-                Console.WriteLine($"Using NNUE from: {NNUEConfig.NNUEPath}");
-            }
-            else
-            {
-                // Try standard format as fallback
-                var standardNNUE = new NNUEEvaluator(NNUEConfig.NNUEPath);
-                if (standardNNUE.IsLoaded)
-                {
-                    _nnueEvaluator = standardNNUE;
-                    _useNNUE = true;
-                    Console.WriteLine($"Using standard NNUE from: {NNUEConfig.NNUEPath}");
-                }
-            }
-
-            if (!_useNNUE)
-            {
-                Console.WriteLine("NNUE loading failed, using classical evaluation");
-            }
-        }
-        else
-        {
-            _useNNUE = false;
-            Console.WriteLine("Using classical evaluation");
-        }
     }
 
     public Move Think(ref Board board, long timeMs, int maxDepth = MaxDepth)
@@ -439,16 +402,7 @@ public class Search
             }
         }
 
-        // Use NNUE evaluation if available
-        int standPat;
-        if (_useNNUE && _nnueEvaluator != null)
-        {
-            standPat = _nnueEvaluator.Evaluate(ref board);
-        }
-        else
-        {
-            standPat = Evaluation.Evaluate(ref board);
-        }
+        int standPat = Evaluation.Evaluate(ref board);
 
         if (standPat >= beta)
             return beta;
