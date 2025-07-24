@@ -303,22 +303,44 @@ class NNUETrainer:
         train_dataset = ChessDataset(train_positions, self.config)
         val_dataset = ChessDataset(val_positions, self.config)
         
-        # Create data loaders
-        train_loader = DataLoader(
-            train_dataset, 
-            batch_size=self.config.batch_size,
-            shuffle=True,
-            num_workers=self.config.num_workers,
-            pin_memory=True if self.device.type == 'cuda' else False
-        )
-        
-        val_loader = DataLoader(
-            val_dataset,
-            batch_size=self.config.batch_size,
-            shuffle=False,
-            num_workers=self.config.num_workers,
-            pin_memory=True if self.device.type == 'cuda' else False
-        )
+        # Create data loaders with error handling for workers
+        try:
+            train_loader = DataLoader(
+                train_dataset, 
+                batch_size=self.config.batch_size,
+                shuffle=True,
+                num_workers=self.config.num_workers,
+                pin_memory=True if self.device.type == 'cuda' else False,
+                persistent_workers=True if self.config.num_workers > 0 else False
+            )
+            
+            val_loader = DataLoader(
+                val_dataset,
+                batch_size=self.config.batch_size,
+                shuffle=False,
+                num_workers=self.config.num_workers,
+                pin_memory=True if self.device.type == 'cuda' else False,
+                persistent_workers=True if self.config.num_workers > 0 else False
+            )
+        except Exception as e:
+            logger.warning(f"Failed to create data loaders with workers: {e}")
+            logger.info("Falling back to single-threaded data loading")
+            
+            train_loader = DataLoader(
+                train_dataset, 
+                batch_size=self.config.batch_size,
+                shuffle=True,
+                num_workers=0,
+                pin_memory=False
+            )
+            
+            val_loader = DataLoader(
+                val_dataset,
+                batch_size=self.config.batch_size,
+                shuffle=False,
+                num_workers=0,
+                pin_memory=False
+            )
         
         # Create model
         model = NNUE(self.config).to(self.device)
@@ -331,14 +353,16 @@ class NNUETrainer:
             weight_decay=self.config.weight_decay
         )
         
+        # Fixed: Remove verbose parameter for PyTorch 2.9.0 compatibility
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=0.5, patience=5, verbose=True
+            optimizer, mode='min', factor=0.5, patience=5
         )
         
         criterion = nn.MSELoss()
         
         # Training loop
         best_val_loss = float('inf')
+        last_lr = optimizer.param_groups[0]['lr']
         
         for epoch in range(self.config.epochs):
             # Training
@@ -352,10 +376,16 @@ class NNUETrainer:
             # Learning rate scheduling
             scheduler.step(val_loss)
             
+            # Check if learning rate changed (manual verbose replacement)
+            current_lr = optimizer.param_groups[0]['lr']
+            if current_lr < last_lr:
+                logger.info(f"Reducing learning rate from {last_lr:.8f} to {current_lr:.8f}")
+                last_lr = current_lr
+            
             logger.info(
                 f"Epoch {epoch+1}/{self.config.epochs} - "
                 f"Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}, "
-                f"LR: {optimizer.param_groups[0]['lr']:.8f}"
+                f"LR: {current_lr:.8f}"
             )
             
             # Save best model
@@ -386,7 +416,10 @@ class NNUETrainer:
             loss = criterion(predictions, evaluations)
             
             loss.backward()
+            
+            # Gradient clipping for stability
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            
             optimizer.step()
             
             total_loss += loss.item()

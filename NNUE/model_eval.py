@@ -2,6 +2,7 @@
 """
 NNUE Model Evaluation and Export Utility
 Evaluates trained models and exports them in various formats
+Compatible with PyTorch 2.9.0
 """
 
 import argparse
@@ -30,8 +31,8 @@ class ModelEvaluator:
         self.model_path = model_path
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
-        # Load model
-        checkpoint = torch.load(model_path, map_location=self.device)
+        # Load model with map_location for device compatibility
+        checkpoint = torch.load(model_path, map_location=self.device, weights_only=False)
         
         if config is None:
             self.config = checkpoint.get('config', TrainingConfig())
@@ -87,6 +88,11 @@ class ModelEvaluator:
                 board.push(np.random.choice(moves))
             test_positions.append(board.fen())
         
+        # Warm up GPU if available
+        if self.device.type == 'cuda':
+            for _ in range(10):
+                self.evaluate_position(test_positions[0])
+        
         # Benchmark individual evaluations
         start_time = time.time()
         for fen in test_positions:
@@ -103,9 +109,17 @@ class ModelEvaluator:
         
         features_tensor = torch.tensor(features_batch, dtype=torch.float32).to(self.device)
         
+        # Warm up for batch
+        if self.device.type == 'cuda':
+            with torch.no_grad():
+                for _ in range(10):
+                    _ = self.model(features_tensor[:1])
+        
         start_time = time.time()
         with torch.no_grad():
             _ = self.model(features_tensor)
+        if self.device.type == 'cuda':
+            torch.cuda.synchronize()  # Ensure GPU operations complete
         batch_time = time.time() - start_time
         
         results = {
@@ -162,7 +176,11 @@ class ModelEvaluator:
                 filtered_model = model_evals[mask]
                 filtered_engine = engine_evals[mask]
                 
-                correlation = np.corrcoef(filtered_model, filtered_engine)[0, 1]
+                if len(filtered_model) > 1:
+                    correlation = np.corrcoef(filtered_model, filtered_engine)[0, 1]
+                else:
+                    correlation = 0.0
+                    
                 mae = np.mean(np.abs(filtered_model - filtered_engine))
                 rmse = np.sqrt(np.mean((filtered_model - filtered_engine) ** 2))
                 
@@ -209,7 +227,7 @@ class ModelEvaluator:
             features = white_features if board.turn == chess.WHITE else black_features
             feature_activations += features
         
-        feature_activations /= len(positions)
+        feature_activations /= len(positions[:1000])
         
         # Find most important features
         importance_scores = feature_weights * feature_activations
@@ -222,7 +240,7 @@ class ModelEvaluator:
             'top_features': top_features.tolist()
         }
         
-        print(f"Analyzed {len(positions)} positions")
+        print(f"Analyzed {min(len(positions), 1000)} positions")
         print("Top 5 most important features:")
         for i, feature_idx in enumerate(top_features[:5]):
             print(f"{i+1}. Feature {feature_idx}: {importance_scores[feature_idx]:.4f}")
@@ -347,12 +365,13 @@ class NNUEExporter:
             # Create dummy input
             dummy_input = torch.randn(1, self.config.input_size)
             
+            # Use dynamic_axes for flexible batch size
             torch.onnx.export(
                 self.model,
                 dummy_input,
                 output_path,
                 export_params=True,
-                opset_version=11,
+                opset_version=14,  # Use newer opset for PyTorch 2.x
                 input_names=['input'],
                 output_names=['output'],
                 dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}}
@@ -366,20 +385,36 @@ class NNUEExporter:
             print(f"ONNX export failed: {e}")
     
     def export_pytorch_mobile(self, output_path: str):
-        """Export model for PyTorch Mobile"""
+        """Export model for PyTorch Mobile (updated for PyTorch 2.x)"""
         try:
-            # Optimize for mobile
+            # Note: _save_for_lite_interpreter is deprecated in PyTorch 2.x
+            # Using standard TorchScript instead
             self.model.eval()
-            traced_model = torch.jit.trace(self.model, torch.randn(1, self.config.input_size))
-            optimized_model = torch.jit.optimize_for_inference(traced_model)
+            example_input = torch.randn(1, self.config.input_size)
+            traced_model = torch.jit.trace(self.model, example_input)
             
-            # Save for mobile
-            optimized_model._save_for_lite_interpreter(output_path)
+            # Standard save for mobile compatibility
+            traced_model.save(output_path)
             
-            print(f"PyTorch Mobile model exported to {output_path}")
+            print(f"PyTorch mobile model exported to {output_path}")
+            print("Note: Use standard TorchScript loading in mobile apps")
             
+        except AttributeError as e:
+            if "_save_for_lite_interpreter" in str(e):
+                # Fallback for older PyTorch versions
+                try:
+                    traced_model = torch.jit.trace(self.model, torch.randn(1, self.config.input_size))
+                    optimized_model = torch.jit.optimize_for_inference(traced_model)
+                    optimized_model._save_for_lite_interpreter(output_path)
+                    print(f"PyTorch Mobile model exported to {output_path}")
+                except Exception as e2:
+                    print(f"PyTorch Mobile export failed: {e2}")
+                    print("Try using ONNX export instead for mobile deployment")
+            else:
+                print(f"PyTorch Mobile export failed: {e}")
         except Exception as e:
             print(f"PyTorch Mobile export failed: {e}")
+            print("This is expected with PyTorch 2.x - use ONNX export instead")
 
 def main():
     parser = argparse.ArgumentParser(description="NNUE Model Evaluation and Export")

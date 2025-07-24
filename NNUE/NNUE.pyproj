@@ -23,6 +23,7 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="nnue_validation.py" />
     <Compile Include="test_imports.py" />
     <Compile Include="model_eval.py" />
     <Compile Include="NNUE.py" />
