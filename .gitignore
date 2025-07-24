@@ -363,3 +363,4 @@ MigrationBackup/
 FodyWeavers.xsd
 /Database/EngineStorage
 /Database/ChessEngines
+/NNUE/models
