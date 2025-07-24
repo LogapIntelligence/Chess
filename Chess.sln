@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chess", "Chess\Chess.csproj
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Database", "Database\Database.csproj", "{B7A3221C-7444-4FA1-B1F2-F7C2BAE5F6D7}"
 EndProject
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "NNUE", "NNUE\NNUE.pyproj", "{1BE595B5-8C28-4172-84AA-B90F67948F28}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,8 @@ Global
 		{B7A3221C-7444-4FA1-B1F2-F7C2BAE5F6D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B7A3221C-7444-4FA1-B1F2-F7C2BAE5F6D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B7A3221C-7444-4FA1-B1F2-F7C2BAE5F6D7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1BE595B5-8C28-4172-84AA-B90F67948F28}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1BE595B5-8C28-4172-84AA-B90F67948F28}.Release|Any CPU.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
