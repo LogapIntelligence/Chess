@@ -33,6 +33,10 @@
     <Compile Include="training_config.py" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="models\test_nnue_best.pth" />
+    <Content Include="models\test_nnue_epoch_10.pth" />
+    <Content Include="models\test_nnue_epoch_20.pth" />
+    <Content Include="models\test_nnue_final.nnue" />
     <Content Include="nnue_readme.md" />
     <Content Include="requirements.txt" />
     <Content Include="train_batch.txt" />
@@ -47,6 +51,9 @@
       <PathEnvironmentVariable>PYTHONPATH</PathEnvironmentVariable>
       <Architecture>X64</Architecture>
     </Interpreter>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="models\" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in

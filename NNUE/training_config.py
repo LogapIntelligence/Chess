@@ -49,7 +49,7 @@ def create_training_config():
     # =============================================================================
     config.device = 'cuda' if torch.cuda.is_available() else 'cpu'  # Auto-detect device
     if platform.system() == 'Windows':
-        config.num_workers = 4  # Disable multiprocessing on Windows
+        config.num_workers = 0  # Disable multiprocessing on Windows
     else:
         config.num_workers = 4  # Data loading workers for Linux/Mac    
     # =============================================================================

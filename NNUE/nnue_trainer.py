@@ -62,7 +62,7 @@ class TrainingConfig:
     
     # Training options
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
-    num_workers: int = 4
+    num_workers: int = 0
     save_frequency: int = 10  # Save model every N epochs
     
     # Output
