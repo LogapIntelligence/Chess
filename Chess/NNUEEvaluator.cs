@@ -61,24 +61,95 @@ namespace Chess
         {
             try
             {
+                var fileInfo = new FileInfo(_nnuePath);
+                Console.WriteLine($"NNUE file size: {fileInfo.Length} bytes");
+
                 using (var fs = new FileStream(_nnuePath, FileMode.Open, FileAccess.Read))
                 using (var br = new BinaryReader(fs))
                 {
+                    long startPos = fs.Position;
+
                     // Read and verify header
                     byte[] magic = br.ReadBytes(4);
-                    if (Encoding.ASCII.GetString(magic) != "NNUE")
+                    string magicStr = Encoding.ASCII.GetString(magic);
+                    Console.WriteLine($"Magic bytes: {BitConverter.ToString(magic)} ('{magicStr}')");
+
+                    if (magicStr != "NNUE")
                     {
-                        throw new InvalidOperationException("Invalid NNUE file format");
+                        throw new InvalidOperationException($"Invalid NNUE file format. Expected 'NNUE', got '{magicStr}'");
                     }
 
                     uint versionHash = br.ReadUInt32();
                     uint architectureHash = br.ReadUInt32();
+                    Console.WriteLine($"Version hash: 0x{versionHash:X8}");
+                    Console.WriteLine($"Architecture hash: 0x{architectureHash:X8}");
 
-                    // Read description
-                    int descriptionLength = br.ReadInt32();
-                    byte[] descriptionBytes = br.ReadBytes(descriptionLength);
-                    string description = Encoding.UTF8.GetString(descriptionBytes);
-                    Console.WriteLine($"Loading NNUE model: {description}");
+                    // Check if this looks like a description length or the start of weights
+                    long posBeforeDesc = fs.Position;
+                    uint possibleDescLength = br.ReadUInt32();
+
+                    // If the value looks suspiciously large or the file doesn't have enough bytes for it,
+                    // it's probably not a description length but the start of the weights
+                    bool hasDescription = possibleDescLength < 1000 && fs.Position + possibleDescLength <= fs.Length;
+
+                    if (hasDescription)
+                    {
+                        try
+                        {
+                            // Try to read as description
+                            byte[] descBytes = br.ReadBytes((int)possibleDescLength);
+                            string desc = Encoding.UTF8.GetString(descBytes);
+
+                            // Check if it's actually text
+                            bool isText = true;
+                            foreach (char c in desc)
+                            {
+                                if (char.IsControl(c) && c != '\n' && c != '\r' && c != '\t')
+                                {
+                                    isText = false;
+                                    break;
+                                }
+                            }
+
+                            if (isText)
+                            {
+                                Console.WriteLine($"Description length: {possibleDescLength}");
+                                Console.WriteLine($"Description: {desc}");
+                            }
+                            else
+                            {
+                                // Not text, probably weights - rewind
+                                fs.Seek(posBeforeDesc, SeekOrigin.Begin);
+                                Console.WriteLine("No description field detected, proceeding to weights");
+                            }
+                        }
+                        catch
+                        {
+                            // Failed to read description, assume no description
+                            fs.Seek(posBeforeDesc, SeekOrigin.Begin);
+                            Console.WriteLine("No description field detected, proceeding to weights");
+                        }
+                    }
+                    else
+                    {
+                        // No description, rewind to read this as part of weights
+                        fs.Seek(posBeforeDesc, SeekOrigin.Begin);
+                        Console.WriteLine("No description field detected, proceeding to weights");
+                    }
+
+                    // Calculate expected file size
+                    long expectedSize = CalculateExpectedFileSize();
+                    long currentPos = fs.Position;
+                    long remainingBytes = fs.Length - currentPos;
+
+                    Console.WriteLine($"Current position: {currentPos}");
+                    Console.WriteLine($"Remaining bytes: {remainingBytes}");
+                    Console.WriteLine($"Expected weights size: {expectedSize - currentPos}");
+
+                    if (remainingBytes < expectedSize - currentPos)
+                    {
+                        throw new InvalidOperationException($"File too small for network weights. Need {expectedSize - currentPos} more bytes, but only {remainingBytes} available");
+                    }
 
                     // Allocate arrays
                     _featureTransformerWeights1 = new float[HiddenSize1, InputSize];
@@ -91,20 +162,28 @@ namespace Chess
                     _outputBias2 = new float[1];
 
                     // Read feature transformer layer 1
+                    Console.WriteLine("Reading layer 1 weights...");
                     ReadWeights(br, _featureTransformerWeights1);
                     ReadBias(br, _featureTransformerBias1);
 
                     // Read feature transformer layer 2
+                    Console.WriteLine("Reading layer 2 weights...");
                     ReadWeights(br, _featureTransformerWeights2);
                     ReadBias(br, _featureTransformerBias2);
 
                     // Read output layer 1
+                    Console.WriteLine("Reading output layer 1 weights...");
                     ReadWeights(br, _outputWeights1);
                     ReadBias(br, _outputBias1);
 
                     // Read output layer 2
+                    Console.WriteLine("Reading output layer 2 weights...");
                     ReadWeights(br, _outputWeights2);
                     ReadBias(br, _outputBias2);
+
+                    long finalPos = fs.Position;
+                    Console.WriteLine($"Read {finalPos - startPos} bytes total");
+                    Console.WriteLine($"Bytes remaining in file: {fs.Length - finalPos}");
 
                     _isLoaded = true;
                     Console.WriteLine("NNUE model loaded successfully!");
@@ -115,38 +194,111 @@ namespace Chess
                 Console.WriteLine($"NNUE file not found: {_nnuePath}");
                 Console.WriteLine("Falling back to classical evaluation");
             }
+            catch (EndOfStreamException ex)
+            {
+                Console.WriteLine($"Error: Reached end of file while reading NNUE");
+                Console.WriteLine($"Details: {ex.Message}");
+                Console.WriteLine("The NNUE file appears to be truncated or in a different format");
+                Console.WriteLine("Falling back to classical evaluation");
+            }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error loading NNUE: {ex.Message}");
+                Console.WriteLine($"Exception type: {ex.GetType().Name}");
                 Console.WriteLine("Falling back to classical evaluation");
             }
         }
 
         /// <summary>
-        /// Read weight matrix from binary reader
+        /// Calculate expected file size based on network architecture
+        /// </summary>
+        private long CalculateExpectedFileSize()
+        {
+            long size = 0;
+
+            // Header: magic (4) + version (4) + architecture (4) + description length (4)
+            size += 16;
+
+            // Description (variable, but we'll estimate)
+            size += 100; // Rough estimate
+
+            // Layer 1: weights + bias
+            size += HiddenSize1 * InputSize * 4; // weights as floats
+            size += HiddenSize1 * 4; // bias as floats
+
+            // Layer 2: weights + bias
+            size += HiddenSize2 * HiddenSize1 * 4;
+            size += HiddenSize2 * 4;
+
+            // Output layer 1: weights + bias
+            size += HiddenSize2 * HiddenSize2 * 4;
+            size += HiddenSize2 * 4;
+
+            // Output layer 2: weights + bias
+            size += 1 * HiddenSize2 * 4;
+            size += 1 * 4;
+
+            return size;
+        }
+
+        /// <summary>
+        /// Read weight matrix from binary reader with validation
         /// </summary>
         private void ReadWeights(BinaryReader br, float[,] weights)
         {
             int rows = weights.GetLength(0);
             int cols = weights.GetLength(1);
+            int totalElements = rows * cols;
 
-            for (int i = 0; i < rows; i++)
+            Console.WriteLine($"  Reading {rows}x{cols} = {totalElements} weights ({totalElements * 4} bytes)");
+
+            try
             {
-                for (int j = 0; j < cols; j++)
+                for (int i = 0; i < rows; i++)
                 {
-                    weights[i, j] = br.ReadSingle();
+                    for (int j = 0; j < cols; j++)
+                    {
+                        weights[i, j] = br.ReadSingle();
+
+                        // Sanity check for reasonable weight values
+                        if (float.IsNaN(weights[i, j]) || float.IsInfinity(weights[i, j]) ||
+                            Math.Abs(weights[i, j]) > 100.0f)
+                        {
+                            Console.WriteLine($"  Warning: Unusual weight value at [{i},{j}]: {weights[i, j]}");
+                        }
+                    }
                 }
+            }
+            catch (EndOfStreamException)
+            {
+                throw new EndOfStreamException($"Unexpected end of file while reading weights. Expected {totalElements} values.");
             }
         }
 
         /// <summary>
-        /// Read bias vector from binary reader
+        /// Read bias vector from binary reader with validation
         /// </summary>
         private void ReadBias(BinaryReader br, float[] bias)
         {
-            for (int i = 0; i < bias.Length; i++)
+            Console.WriteLine($"  Reading {bias.Length} bias values ({bias.Length * 4} bytes)");
+
+            try
             {
-                bias[i] = br.ReadSingle();
+                for (int i = 0; i < bias.Length; i++)
+                {
+                    bias[i] = br.ReadSingle();
+
+                    // Sanity check for reasonable bias values
+                    if (float.IsNaN(bias[i]) || float.IsInfinity(bias[i]) ||
+                        Math.Abs(bias[i]) > 100.0f)
+                    {
+                        Console.WriteLine($"  Warning: Unusual bias value at [{i}]: {bias[i]}");
+                    }
+                }
+            }
+            catch (EndOfStreamException)
+            {
+                throw new EndOfStreamException($"Unexpected end of file while reading bias. Expected {bias.Length} values.");
             }
         }
 

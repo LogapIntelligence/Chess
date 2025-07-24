@@ -48,13 +48,23 @@ public class Search
         // Initialize NNUE if enabled
         if (NNUEConfig.UseNNUE && !string.IsNullOrEmpty(NNUEConfig.NNUEPath))
         {
-            // Try standard format
-            var standardNNUE = new NNUEEvaluator(NNUEConfig.NNUEPath);
-            if (standardNNUE.IsLoaded)
+            // Try flexible loader first
+            if (FlexibleNNUELoader.TryLoadNNUE(NNUEConfig.NNUEPath, out var weights))
             {
-                _nnueEvaluator = standardNNUE;
+                _nnueEvaluator = new SimpleNNUEEvaluator(weights);
                 _useNNUE = true;
-                Console.WriteLine($"Using standard NNUE from: {NNUEConfig.NNUEPath}");
+                Console.WriteLine($"Using NNUE from: {NNUEConfig.NNUEPath}");
+            }
+            else
+            {
+                // Try standard format as fallback
+                var standardNNUE = new NNUEEvaluator(NNUEConfig.NNUEPath);
+                if (standardNNUE.IsLoaded)
+                {
+                    _nnueEvaluator = standardNNUE;
+                    _useNNUE = true;
+                    Console.WriteLine($"Using standard NNUE from: {NNUEConfig.NNUEPath}");
+                }
             }
 
             if (!_useNNUE)
@@ -429,7 +439,16 @@ public class Search
             }
         }
 
-        int standPat = Evaluation.Evaluate(ref board);
+        // Use NNUE evaluation if available
+        int standPat;
+        if (_useNNUE && _nnueEvaluator != null)
+        {
+            standPat = _nnueEvaluator.Evaluate(ref board);
+        }
+        else
+        {
+            standPat = Evaluation.Evaluate(ref board);
+        }
 
         if (standPat >= beta)
             return beta;

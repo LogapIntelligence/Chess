@@ -114,14 +114,20 @@ public class Uci
         // Check if NNUE is available and enabled
         if (NNUEConfig.UseNNUE && !string.IsNullOrEmpty(NNUEConfig.NNUEPath))
         {
-            INNUEEvaluator? nnueEvaluator = null;
-
-            // Try to load NNUE based on file extension
-            nnueEvaluator = new NNUEEvaluator(NNUEConfig.NNUEPath);
-
-            if (nnueEvaluator != null && nnueEvaluator.IsLoaded)
+            // Try flexible loader first
+            if (FlexibleNNUELoader.TryLoadNNUE(NNUEConfig.NNUEPath, out var weights))
             {
+                var nnueEvaluator = new SimpleNNUEEvaluator(weights);
                 eval = nnueEvaluator.Evaluate(ref _board);
+                SendOutput($"info string NNUE evaluation: {eval} cp");
+                return;
+            }
+
+            // Try standard NNUE
+            var standardNNUE = new NNUEEvaluator(NNUEConfig.NNUEPath);
+            if (standardNNUE.IsLoaded)
+            {
+                eval = standardNNUE.Evaluate(ref _board);
                 SendOutput($"info string NNUE evaluation: {eval} cp");
                 return;
             }
@@ -131,6 +137,7 @@ public class Uci
         eval = Evaluation.Evaluate(ref _board);
         SendOutput($"info string static evaluation: {eval} cp");
     }
+
     private void SendOutput(string message)
     {
         Console.WriteLine(message);
