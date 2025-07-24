@@ -21,7 +21,16 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="model_eval.py" />
     <Compile Include="NNUE.py" />
+    <Compile Include="nnue_trainer.py" />
+    <Compile Include="setup_script.py" />
+    <Compile Include="training_config.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="nnue_readme.md" />
+    <Content Include="requirements_txt.txt" />
+    <Content Include="train_batch.txt" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in

@@ -1,0 +1,308 @@
+@echo off
+REM ============================================================================
+REM NNUE Training Batch Script for Windows
+REM Automated setup and training for chess NNUE models
+REM ============================================================================
+
+setlocal EnableDelayedExpansion
+
+echo.
+echo ================================================================================
+echo                          NNUE Chess Training System
+echo ================================================================================
+echo.
+
+REM Check if Python is installed
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Python is not installed or not in PATH
+    echo Please install Python 3.8+ from https://python.org
+    pause
+    exit /b 1
+)
+
+echo ✓ Python detected
+python --version
+
+echo.
+echo Choose training option:
+echo 1. Quick test training (100K positions, 20 epochs, ~30 minutes)
+echo 2. Standard training (1M positions, 100 epochs, ~4-8 hours)
+echo 3. Large scale training (5M positions, 200 epochs, ~1-2 days)
+echo 4. CPU-only training (optimized for CPU, slower)
+echo 5. Custom training (specify parameters)
+echo 6. Test database connection only
+echo 7. Setup and install requirements
+echo.
+
+set /p choice="Enter choice (1-7): "
+
+if "%choice%"=="1" goto quick_test
+if "%choice%"=="2" goto standard
+if "%choice%"=="3" goto large_scale
+if "%choice%"=="4" goto cpu_only
+if "%choice%"=="5" goto custom
+if "%choice%"=="6" goto test_connection
+if "%choice%"=="7" goto setup
+
+echo Invalid choice. Exiting.
+pause
+exit /b 1
+
+:setup
+echo.
+echo ================================================================================
+echo                              SETUP AND INSTALLATION
+echo ================================================================================
+echo.
+
+echo Installing Python requirements...
+pip install -r requirements.txt
+if errorlevel 1 (
+    echo ERROR: Failed to install requirements
+    echo Make sure you have an internet connection and pip is working
+    pause
+    exit /b 1
+)
+
+echo.
+echo Running setup script...
+python setup.py
+if errorlevel 1 (
+    echo ERROR: Setup script failed
+    pause
+    exit /b 1
+)
+
+echo.
+echo ✓ Setup completed successfully!
+echo You can now run training options 1-6
+pause
+exit /b 0
+
+:test_connection
+echo.
+echo ================================================================================
+echo                           TESTING DATABASE CONNECTION
+echo ================================================================================
+echo.
+
+python NNUE.py --test-connection
+if errorlevel 1 (
+    echo.
+    echo ERROR: Database connection failed!
+    echo.
+    echo Common solutions:
+    echo 1. Make sure SQL Server is running
+    echo 2. Check the connection string in training_config.py
+    echo 3. Ensure ODBC Driver 17 for SQL Server is installed
+    echo 4. Verify the ChessDatabase exists and has data
+    echo.
+) else (
+    echo.
+    echo ✓ Database connection successful!
+    echo You can now proceed with training
+    echo.
+)
+pause
+exit /b 0
+
+:quick_test
+echo.
+echo ================================================================================
+echo                              QUICK TEST TRAINING
+echo ================================================================================
+echo.
+echo Configuration:
+echo - Dataset: 100,000 positions
+echo - Epochs: 20
+echo - Batch size: 4096
+echo - Estimated time: 30-60 minutes
+echo.
+
+set preset=quick_test
+set extra_args=
+goto start_training
+
+:standard
+echo.
+echo ================================================================================
+echo                             STANDARD TRAINING
+echo ================================================================================
+echo.
+echo Configuration:
+echo - Dataset: 1,000,000 positions
+echo - Epochs: 100
+echo - Batch size: 8192
+echo - Estimated time: 4-8 hours
+echo.
+
+set preset=default
+set extra_args=
+goto start_training
+
+:large_scale
+echo.
+echo ================================================================================
+echo                           LARGE SCALE TRAINING
+echo ================================================================================
+echo.
+echo Configuration:
+echo - Dataset: 5,000,000 positions
+echo - Epochs: 200
+echo - Batch size: 16384
+echo - Estimated time: 1-2 days
+echo.
+echo WARNING: This requires significant GPU memory and time!
+echo.
+
+set /p confirm="Continue with large scale training? (y/n): "
+if /i not "%confirm%"=="y" (
+    echo Training cancelled.
+    pause
+    exit /b 0
+)
+
+set preset=large_scale
+set extra_args=
+goto start_training
+
+:cpu_only
+echo.
+echo ================================================================================
+echo                             CPU-ONLY TRAINING
+echo ================================================================================
+echo.
+echo Configuration:
+echo - Dataset: 500,000 positions
+echo - Epochs: 100
+echo - Batch size: 1024 (optimized for CPU)
+echo - Device: CPU
+echo - Estimated time: 12-24 hours
+echo.
+
+set preset=cpu_only
+set extra_args=--device cpu
+goto start_training
+
+:custom
+echo.
+echo ================================================================================
+echo                             CUSTOM TRAINING
+echo ================================================================================
+echo.
+
+set /p batch_size="Batch size (default 8192): "
+if "%batch_size%"=="" set batch_size=8192
+
+set /p epochs="Number of epochs (default 100): "
+if "%epochs%"=="" set epochs=100
+
+set /p max_pos="Maximum positions (default 1000000): "
+if "%max_pos%"=="" set max_pos=1000000
+
+set /p lr="Learning rate (default 0.001): "
+if "%lr%"=="" set lr=0.001
+
+set /p model_name="Model name (default chess_nnue): "
+if "%model_name%"=="" set model_name=chess_nnue
+
+echo.
+echo Custom configuration:
+echo - Batch size: %batch_size%
+echo - Epochs: %epochs%
+echo - Max positions: %max_pos%
+echo - Learning rate: %lr%
+echo - Model name: %model_name%
+echo.
+
+set preset=default
+set extra_args=--batch-size %batch_size% --epochs %epochs% --max-positions %max_pos% --learning-rate %lr% --model-name %model_name%
+goto start_training
+
+:start_training
+echo.
+echo Press any key to start training, or Ctrl+C to cancel...
+pause >nul
+
+echo.
+echo ================================================================================
+echo                              STARTING TRAINING
+echo ================================================================================
+echo.
+
+REM Create log directory
+if not exist "logs" mkdir logs
+
+REM Create timestamp for log file
+for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
+set "timestamp=%dt:~0,4%-%dt:~4,2%-%dt:~6,2%_%dt:~8,2%-%dt:~10,2%-%dt:~12,2%"
+
+echo Training started at: %date% %time%
+echo Preset: %preset%
+echo Extra arguments: %extra_args%
+echo.
+echo Training log will be saved to: logs\training_%timestamp%.log
+echo.
+
+REM Start training with logging
+python training_config.py --preset %preset% --show
+echo.
+
+python NNUE.py %extra_args% 2>&1 | tee logs\training_%timestamp%.log
+
+if errorlevel 1 (
+    echo.
+    echo ================================================================================
+    echo                              TRAINING FAILED
+    echo ================================================================================
+    echo.
+    echo Training failed with error code: !errorlevel!
+    echo.
+    echo Common issues and solutions:
+    echo.
+    echo 1. GPU Memory Issues:
+    echo    - Reduce batch size (try 4096, 2048, or 1024)
+    echo    - Close other GPU applications
+    echo    - Use CPU training instead
+    echo.
+    echo 2. Database Issues:
+    echo    - Check database connection
+    echo    - Ensure sufficient training data exists
+    echo    - Verify SQL Server is running
+    echo.
+    echo 3. Installation Issues:
+    echo    - Run setup option (7) first
+    echo    - Check Python and pip versions
+    echo    - Install CUDA drivers for GPU training
+    echo.
+    echo Check the log file for detailed error information:
+    echo logs\training_%timestamp%.log
+    echo.
+) else (
+    echo.
+    echo ================================================================================
+    echo                           TRAINING COMPLETED SUCCESSFULLY!
+    echo ================================================================================
+    echo.
+    echo Training finished at: %date% %time%
+    echo.
+    echo Model files saved in: models\
+    echo Training log saved in: logs\training_%timestamp%.log
+    echo.
+    echo Next steps:
+    echo 1. Evaluate your model:
+    echo    python model_eval.py models\%model_name%_best.pth --benchmark
+    echo.
+    echo 2. Export for chess engine:
+    echo    python model_eval.py models\%model_name%_best.pth --export-nnue my_engine.nnue
+    echo.
+    echo 3. Compare with existing engine:
+    echo    python model_eval.py models\%model_name%_best.pth --compare-engine stockfish.exe
+    echo.
+)
+
+echo.
+echo Press any key to exit...
+pause >nul
+exit /b 0
