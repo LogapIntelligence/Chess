@@ -49,7 +49,7 @@ def create_training_config():
     # =============================================================================
     config.device = 'cuda' if torch.cuda.is_available() else 'cpu'  # Auto-detect device
     if platform.system() == 'Windows':
-        config.num_workers = 0  # Disable multiprocessing on Windows
+        config.num_workers = 4  # Disable multiprocessing on Windows
     else:
         config.num_workers = 4  # Data loading workers for Linux/Mac    
     # =============================================================================
@@ -68,7 +68,7 @@ def create_quick_test_config():
     # Reduce parameters for quick testing
     config.max_positions = 100000      # Smaller dataset
     config.epochs = 20                 # Fewer epochs
-    config.batch_size = 4096           # Smaller batch size
+    config.batch_size = 16384           # Smaller batch size
     config.model_name = 'test_nnue'    # Different name
     
     # Auto-detect device for quick test too

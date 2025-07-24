@@ -27,7 +27,7 @@ def create_quick_config():
     # Quick test parameters - smaller and faster
     config.max_positions = 100000     # Small dataset for quick testing
     config.epochs = 20                # Few epochs for quick results
-    config.batch_size = 4096          # Moderate batch size
+    config.batch_size = 16384          # Moderate batch size
     config.learning_rate = 0.001      # Standard learning rate
     config.hidden_size = 256          # Standard hidden size
     config.model_name = "quick_test"  # Different name to avoid conflicts
@@ -41,7 +41,7 @@ def create_quick_config():
     # Fix for Windows multiprocessing issues
     import platform
     if platform.system() == 'Windows':
-        config.num_workers = 0  # Disable multiprocessing on Windows
+        config.num_workers = 4  # Disable multiprocessing on Windows
     else:
         # Reduce workers if on CPU
         if config.device == 'cpu':
