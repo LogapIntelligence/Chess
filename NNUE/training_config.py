@@ -5,6 +5,8 @@ Modify this file to customize your training settings
 """
 
 import torch  # Import at module level for proper CUDA initialization
+import platform
+
 from nnue_trainer import TrainingConfig
 
 def create_training_config():
@@ -46,8 +48,10 @@ def create_training_config():
     # HARDWARE SETTINGS
     # =============================================================================
     config.device = 'cuda' if torch.cuda.is_available() else 'cpu'  # Auto-detect device
-    config.num_workers = 4             # Data loading workers (reduce if issues)
-    
+    if platform.system() == 'Windows':
+        config.num_workers = 0  # Disable multiprocessing on Windows
+    else:
+        config.num_workers = 4  # Data loading workers for Linux/Mac    
     # =============================================================================
     # TRAINING OPTIONS
     # =============================================================================

@@ -38,10 +38,14 @@ def create_quick_config():
     import torch
     config.device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
-    # Reduce workers if on CPU
-    if config.device == 'cpu':
-        config.num_workers = 2
-        config.batch_size = 2048  # Smaller batch for CPU
+    # Fix for Windows multiprocessing issues
+    import platform
+    if platform.system() == 'Windows':
+        config.num_workers = 0  # Disable multiprocessing on Windows
+    else:
+        # Reduce workers if on CPU
+        if config.device == 'cpu':
+            config.num_workers = 2
     
     return config
 
