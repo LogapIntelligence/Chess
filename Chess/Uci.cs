@@ -107,7 +107,30 @@ public class Uci
             }
         }
     }
+    private void DisplayEval()
+    {
+        int eval;
 
+        // Check if NNUE is available and enabled
+        if (NNUEConfig.UseNNUE && !string.IsNullOrEmpty(NNUEConfig.NNUEPath))
+        {
+            INNUEEvaluator? nnueEvaluator = null;
+
+            // Try to load NNUE based on file extension
+            nnueEvaluator = new NNUEEvaluator(NNUEConfig.NNUEPath);
+
+            if (nnueEvaluator != null && nnueEvaluator.IsLoaded)
+            {
+                eval = nnueEvaluator.Evaluate(ref _board);
+                SendOutput($"info string NNUE evaluation: {eval} cp");
+                return;
+            }
+        }
+
+        // Fall back to classical evaluation
+        eval = Evaluation.Evaluate(ref _board);
+        SendOutput($"info string static evaluation: {eval} cp");
+    }
     private void SendOutput(string message)
     {
         Console.WriteLine(message);
@@ -502,12 +525,6 @@ public class Uci
         output.AppendLine($"Fullmove number: {_board.FullmoveNumber}");
 
         SendOutput(output.ToString());
-    }
-
-    private void DisplayEval()
-    {
-        int eval = Evaluation.Evaluate(ref _board);
-        SendOutput($"info string static evaluation: {eval} cp");
     }
 
     private void Perft(int depth)
