@@ -20,7 +20,8 @@ import chess.engine
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-from NNUE import NNUE, TrainingConfig, HalfKPFeatures, DatabaseConnection
+# Fixed imports - import from the actual modules
+from nnue_trainer import NNUE, TrainingConfig, HalfKPFeatures, DatabaseConnection
 
 class ModelEvaluator:
     """Evaluate and analyze NNUE models"""

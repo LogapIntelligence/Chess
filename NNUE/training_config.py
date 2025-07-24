@@ -4,7 +4,7 @@ NNUE Training Configuration
 Modify this file to customize your training settings
 """
 
-from NNUE import TrainingConfig
+from nnue_trainer import TrainingConfig
 
 def create_training_config():
     """Create training configuration with custom settings"""
@@ -14,12 +14,8 @@ def create_training_config():
     # DATABASE SETTINGS
     # =============================================================================
     # Update this connection string for your SQL Server instance
-    config.connection_string = (
-        "Server=localhost\\SQLEXPRESS;"
-        "Database=ChessDatabase;"
-        "Trusted_Connection=True;"
-        "Driver={ODBC Driver 17 for SQL Server};"
-    )
+    config.connection_string = "Server=localhost\\SQLEXPRESS;Database=ChessDatabase;UID=chess;PWD=chess@123;Driver={ODBC Driver 17 for SQL Server};"
+
     
     # =============================================================================
     # MODEL ARCHITECTURE

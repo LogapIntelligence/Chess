@@ -63,12 +63,8 @@ def check_database_connection():
         import pyodbc
         
         # Default connection string - user should modify as needed
-        connection_string = (
-            "Server=localhost\\SQLEXPRESS;"
-            "Database=ChessDatabase;"
-            "Trusted_Connection=True;"
-            "Driver={ODBC Driver 17 for SQL Server};"
-        )
+        connection_string = "Server=localhost\\SQLEXPRESS;Database=ChessDatabase;UID=chess;PWD=chess@123;Driver={ODBC Driver 17 for SQL Server};"
+
         
         conn = pyodbc.connect(connection_string)
         cursor = conn.cursor()

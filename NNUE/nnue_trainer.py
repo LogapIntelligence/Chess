@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 class TrainingConfig:
     """Configuration for NNUE training"""
     # Database connection
-    connection_string: str = "Server=localhost\\SQLEXPRESS;Database=ChessDatabase;Trusted_Connection=True;Driver={ODBC Driver 17 for SQL Server};"
+    connection_string = "Server=localhost\\SQLEXPRESS;Database=ChessDatabase;UID=chess;PWD=chess@123;Driver={ODBC Driver 17 for SQL Server};"
     
     # Model architecture
     input_size: int = 768  # HalfKP features (64 squares * 12 piece types / 2)
@@ -220,9 +220,10 @@ class DatabaseConnection:
     def load_training_data(self, config: TrainingConfig) -> List[Tuple[str, float, str]]:
         """Load training data from database"""
         logger.info("Loading training data from database...")
-        
+    
+        # Fixed query - removed DISTINCT since we're deduplicating in Python anyway
         query = """
-        SELECT DISTINCT 
+        SELECT 
             cm.Fen,
             cm.Evaluation, 
             cg.Result,
@@ -235,34 +236,34 @@ class DatabaseConnection:
             AND cm.Fen IS NOT NULL
         ORDER BY NEWID()  -- Random order
         """
-        
+    
         try:
             conn = pyodbc.connect(self.connection_string)
             cursor = conn.cursor()
-            
+        
             cursor.execute(query, (config.min_ply, config.max_eval * config.eval_scale))
-            
+        
             positions = []
             seen_zobrist = set()
-            
+        
             for row in tqdm(cursor.fetchall(), desc="Loading positions"):
                 fen, evaluation, result, move_number = row
-                
+            
                 # Simple deduplication using zobrist-like hash of FEN
                 fen_hash = hashlib.md5(fen.encode()).hexdigest()
                 if fen_hash in seen_zobrist:
                     continue
-                
+            
                 seen_zobrist.add(fen_hash)
                 positions.append((fen, float(evaluation), result))
-                
+            
                 if len(positions) >= config.max_positions:
                     break
-            
+        
             conn.close()
             logger.info(f"Loaded {len(positions)} unique positions")
             return positions
-            
+        
         except Exception as e:
             logger.error(f"Database error: {e}")
             raise
