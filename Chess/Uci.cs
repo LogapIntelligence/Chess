@@ -81,9 +81,6 @@ public class Uci
                     case "display":
                         DisplayBoard();
                         break;
-                    case "eval":
-                        DisplayEval();
-                        break;
                     case "perft":
                         if (tokens.Length > 1 && int.TryParse(tokens[1], out int depth))
                             Perft(depth);
@@ -106,36 +103,6 @@ public class Uci
                     SendOutput($"info string error: {ex.Message}");
             }
         }
-    }
-    private void DisplayEval()
-    {
-        int eval;
-
-        // Check if NNUE is available and enabled
-        if (NNUEConfig.UseNNUE && !string.IsNullOrEmpty(NNUEConfig.NNUEPath))
-        {
-            // Try flexible loader first
-            if (FlexibleNNUELoader.TryLoadNNUE(NNUEConfig.NNUEPath, out var weights))
-            {
-                var nnueEvaluator = new SimpleNNUEEvaluator(weights);
-                eval = nnueEvaluator.Evaluate(ref _board);
-                SendOutput($"info string NNUE evaluation: {eval} cp");
-                return;
-            }
-
-            // Try standard NNUE
-            var standardNNUE = new NNUEEvaluator(NNUEConfig.NNUEPath);
-            if (standardNNUE.IsLoaded)
-            {
-                eval = standardNNUE.Evaluate(ref _board);
-                SendOutput($"info string NNUE evaluation: {eval} cp");
-                return;
-            }
-        }
-
-        // Fall back to classical evaluation
-        eval = Evaluation.Evaluate(ref _board);
-        SendOutput($"info string static evaluation: {eval} cp");
     }
 
     private void SendOutput(string message)

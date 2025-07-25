@@ -51,7 +51,7 @@ class TrainingConfig:
     batch_size: int = 8192
     learning_rate: float = 0.001
     weight_decay: float = 1e-4
-    epochs: int = 100
+    epochs: int = 1
     validation_split: float = 0.1
     
     # Data parameters
@@ -518,7 +518,7 @@ def main():
     parser.add_argument('--connection-string', type=str, help='Database connection string')
     parser.add_argument('--batch-size', type=int, default=8192, help='Training batch size')
     parser.add_argument('--learning-rate', type=float, default=0.001, help='Learning rate')
-    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs')
+    parser.add_argument('--epochs', type=int, default=1, help='Number of epochs')
     parser.add_argument('--max-positions', type=int, default=1000000, help='Maximum training positions')
     parser.add_argument('--model-name', type=str, default='chess_nnue', help='Model name')
     parser.add_argument('--output-dir', type=str, default='models', help='Output directory')

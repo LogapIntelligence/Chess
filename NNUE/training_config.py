@@ -33,7 +33,7 @@ def create_training_config():
     config.batch_size = 8192           # Batch size (reduce if GPU memory issues: 4096, 2048, 1024)
     config.learning_rate = 0.001       # Learning rate (0.0001 to 0.01)
     config.weight_decay = 1e-4         # L2 regularization
-    config.epochs = 100                # Number of training epochs
+    config.epochs = 1               # Number of training epochs
     config.validation_split = 0.1      # Fraction of data for validation
     
     # =============================================================================
