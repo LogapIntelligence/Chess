@@ -85,7 +85,7 @@ public class Search
         for (int depth = 1; depth <= maxDepth && !_stop; depth++)
         {
             _selDepth = 0;
-            _iterationBestMove = bestMove;
+            _iterationBestMove = bestMove;  // Initialize with current best
             _iterationBestScore = bestScore;
 
             Array.Clear(_pvLength, 0, _pvLength.Length);
@@ -127,8 +127,20 @@ public class Search
                     {
                         bestMove = _pvTable[0, 0];
                     }
+                    // Also check iteration best move
+                    if (_iterationBestMove != default)
+                    {
+                        bestMove = _iterationBestMove;
+                    }
                     break;
                 }
+            }
+
+            // Make sure we have the best move from this iteration
+            if (_iterationBestMove != default)
+            {
+                bestMove = _iterationBestMove;
+                bestScore = _iterationBestScore;
             }
 
             if (!_stop)
@@ -224,9 +236,9 @@ public class Search
         var ttEntry = _tt.Probe(hash);
         Move ttMove = default;
 
-        if (ttEntry.Hash == hash && ttEntry.Depth >= depth && !isPvNode)
+        if (ttEntry.MatchesHash(hash) && ttEntry.Depth >= depth && !isPvNode)
         {
-            ttMove = ttEntry.Move;
+            ttMove = ttEntry.GetMove();
             int ttScore = ttEntry.Score;
 
             // Adjust mate scores
@@ -235,19 +247,22 @@ public class Search
             else if (ttScore < -MateScore + 100)
                 ttScore += ply;
 
-            if (ttEntry.Flag == TTFlag.Exact)
+            TTFlag flag2 = ttEntry.GetFlag();
+            if (flag2 == TTFlag.Exact)
+            {
                 return ttScore;
-            else if (ttEntry.Flag == TTFlag.LowerBound)
+            }
+            else if (flag2 == TTFlag.LowerBound)
                 alpha = Math.Max(alpha, ttScore);
-            else if (ttEntry.Flag == TTFlag.UpperBound)
+            else if (flag2 == TTFlag.UpperBound)
                 beta = Math.Min(beta, ttScore);
 
             if (alpha >= beta)
                 return ttScore;
         }
 
-        if (ttEntry.Hash == hash)
-            ttMove = ttEntry.Move;
+        if (ttEntry.MatchesHash(hash))
+            ttMove = ttEntry.GetMove();
 
         // Drop into quiescence
         if (depth <= 0)

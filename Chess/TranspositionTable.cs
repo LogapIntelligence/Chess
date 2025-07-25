@@ -212,7 +212,13 @@ public unsafe class TranspositionTable
 
         for (int i = 0; i < samplesToCheck; i++)
         {
-            int clusterIndex = i * _clusterCount / samplesToCheck;
+            // Ensure clusterIndex stays within bounds [0, _clusterCount - 1]
+            int clusterIndex = (int)((long)i * (_clusterCount - 1) / (samplesToCheck - 1));
+
+            // Additional safety check
+            if (clusterIndex >= _clusterCount)
+                clusterIndex = _clusterCount - 1;
+
             TTEntry* cluster = _entries + (clusterIndex * ClusterSize);
 
             for (int j = 0; j < ClusterSize; j++)
