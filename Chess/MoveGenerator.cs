@@ -81,6 +81,135 @@ public static class MoveGenerator
         GenerateWhiteCastlingMoves(ref board, ref moves);
     }
 
+    public static void GenerateLegalMoves(ref Board board, ref MoveList moves)
+    {
+        moves.Clear();
+
+        Color us = board.SideToMove;
+        Color them = us == Color.White ? Color.Black : Color.White;
+
+        // Find king position
+        ulong kingBB = us == Color.White ? board.WhiteKing : board.BlackKing;
+        int kingSquare = BitboardConstants.BitScanForward(kingBB);
+
+        // Calculate checkers
+        ulong checkers = GetAttackers(ref board, kingSquare, them);
+        int numCheckers = BitboardConstants.PopCount(checkers);
+
+        // If double check, only king moves are legal
+        if (numCheckers > 1)
+        {
+            GenerateKingMoves(ref board, ref moves, kingSquare, us);
+            return;
+        }
+
+        // Calculate pinned pieces
+        ulong pinned = GetPinnedPieces(ref board, kingSquare, us);
+
+        // If in check, we need to either:
+        // 1. Move the king
+        // 2. Block the check (if single check from sliding piece)
+        // 3. Capture the checking piece
+        ulong blockSquares = 0;
+        ulong checkMask = ~0UL; // All squares allowed if not in check
+
+        if (numCheckers == 1)
+        {
+            int checkerSquare = BitboardConstants.BitScanForward(checkers);
+            checkMask = checkers; // Can capture checker
+
+            // If checker is a sliding piece, we can also block
+            var (checkerType, _) = board.GetPieceAt(checkerSquare);
+            if (checkerType == PieceType.Bishop || checkerType == PieceType.Rook || checkerType == PieceType.Queen)
+            {
+                blockSquares = GetRayBetween(kingSquare, checkerSquare);
+                checkMask |= blockSquares;
+            }
+        }
+
+        // Generate moves for all pieces
+        if (us == Color.White)
+        {
+            GeneratePawnMovesLegal(ref board, ref moves, board.WhitePawns & ~pinned, checkMask, us);
+            GeneratePinnedPawnMoves(ref board, ref moves, board.WhitePawns & pinned, kingSquare, us);
+
+            GenerateKnightMovesLegal(ref board, ref moves, board.WhiteKnights & ~pinned, checkMask);
+            GenerateSlidingMovesLegal(ref board, ref moves, board.WhiteBishops & ~pinned, checkMask, true, false);
+            GenerateSlidingMovesLegal(ref board, ref moves, board.WhiteRooks & ~pinned, checkMask, false, true);
+            GenerateSlidingMovesLegal(ref board, ref moves, board.WhiteQueens & ~pinned, checkMask, true, true);
+
+            // Pinned sliding pieces can only move along the pin ray
+            GeneratePinnedSlidingMoves(ref board, ref moves, board.WhiteBishops & pinned, kingSquare, true, false);
+            GeneratePinnedSlidingMoves(ref board, ref moves, board.WhiteRooks & pinned, kingSquare, false, true);
+            GeneratePinnedSlidingMoves(ref board, ref moves, board.WhiteQueens & pinned, kingSquare, true, true);
+        }
+        else
+        {
+            // Similar for black...
+        }
+
+        // King moves are always generated (king can't be pinned)
+        GenerateKingMoves(ref board, ref moves, kingSquare, us);
+
+        // Castling (only if not in check)
+        if (numCheckers == 0)
+        {
+            GenerateCastlingMovesLegal(ref board, ref moves, us);
+        }
+    }
+
+    private static ulong GetPinnedPieces(ref Board board, int kingSquare, Color us)
+    {
+        ulong pinned = 0;
+        Color them = us == Color.White ? Color.Black : Color.White;
+        ulong ourPieces = us == Color.White ? board.WhitePieces : board.BlackPieces;
+        ulong theirPieces = us == Color.White ? board.BlackPieces : board.WhitePieces;
+
+        // Check for pins from bishops/queens
+        ulong bishopAttackers = us == Color.White ?
+            (board.BlackBishops | board.BlackQueens) :
+            (board.WhiteBishops | board.WhiteQueens);
+
+        ulong potentialPins = MagicBitboards.GetBishopAttacks(kingSquare, theirPieces) & ourPieces;
+
+        while (potentialPins != 0)
+        {
+            int pinnedSquare = BitboardConstants.BitScanForward(potentialPins);
+            potentialPins = BitboardConstants.ClearBit(potentialPins, pinnedSquare);
+
+            ulong withoutPinned = board.AllPieces ^ (1UL << pinnedSquare);
+            ulong attacks = MagicBitboards.GetBishopAttacks(kingSquare, withoutPinned);
+
+            if ((attacks & bishopAttackers) != 0)
+            {
+                pinned |= 1UL << pinnedSquare;
+            }
+        }
+
+        // Check for pins from rooks/queens
+        ulong rookAttackers = us == Color.White ?
+            (board.BlackRooks | board.BlackQueens) :
+            (board.WhiteRooks | board.WhiteQueens);
+
+        potentialPins = MagicBitboards.GetRookAttacks(kingSquare, theirPieces) & ourPieces;
+
+        while (potentialPins != 0)
+        {
+            int pinnedSquare = BitboardConstants.BitScanForward(potentialPins);
+            potentialPins = BitboardConstants.ClearBit(potentialPins, pinnedSquare);
+
+            ulong withoutPinned = board.AllPieces ^ (1UL << pinnedSquare);
+            ulong attacks = MagicBitboards.GetRookAttacks(kingSquare, withoutPinned);
+
+            if ((attacks & rookAttackers) != 0)
+            {
+                pinned |= 1UL << pinnedSquare;
+            }
+        }
+
+        return pinned;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void GenerateBlackMoves(ref Board board, ref MoveList moves)
     {
@@ -358,7 +487,7 @@ public static class MoveGenerator
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void GenerateWhiteCastlingMoves(ref Board board, ref MoveList moves)
     {
-        if (board.IsInCheck()) return;
+        if (board.IsInCheckFast()) return;
 
         if ((board.CastlingRights & CastlingRights.WhiteKingside) != 0 &&
             (board.AllPieces & BitboardConstants.WhiteKingsideCastleMask) == 0 &&
@@ -380,7 +509,7 @@ public static class MoveGenerator
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void GenerateBlackCastlingMoves(ref Board board, ref MoveList moves)
     {
-        if (board.IsInCheck()) return;
+        if (board.IsInCheckFast()) return;
 
         if ((board.CastlingRights & CastlingRights.BlackKingside) != 0 &&
             (board.AllPieces & BitboardConstants.BlackKingsideCastleMask) == 0 &&

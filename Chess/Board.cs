@@ -178,134 +178,215 @@ public struct Board
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly bool IsSquareAttacked(int square, Color byColor)
     {
-        // Add bounds checking
-        if (square < 0 || square >= 64) return false;
+        // Validate square
+        if ((uint)square >= 64) return false;
 
         ulong occupancy = AllPieces;
 
         if (byColor == Color.White)
         {
-            // Pawn attacks
-            if ((BitboardConstants.BlackPawnAttacks[square] & WhitePawns) != 0) return true;
+            // Check pawn attacks first (most common)
+            if ((BitboardConstants.BlackPawnAttacks[square] & WhitePawns) != 0)
+                return true;
 
             // Knight attacks
-            if ((BitboardConstants.KnightMoves[square] & WhiteKnights) != 0) return true;
+            if ((BitboardConstants.KnightMoves[square] & WhiteKnights) != 0)
+                return true;
 
             // King attacks
-            if ((BitboardConstants.KingMoves[square] & WhiteKing) != 0) return true;
+            if ((BitboardConstants.KingMoves[square] & WhiteKing) != 0)
+                return true;
 
-            // Bishop/Queen attacks
-            ulong bishopAttacks = MagicBitboards.GetBishopAttacks(square, occupancy);
-            if ((bishopAttacks & (WhiteBishops | WhiteQueens)) != 0) return true;
+            // Sliding pieces - combine similar attack patterns
+            ulong queens = WhiteQueens;
 
-            // Rook/Queen attacks
-            ulong rookAttacks = MagicBitboards.GetRookAttacks(square, occupancy);
-            if ((rookAttacks & (WhiteRooks | WhiteQueens)) != 0) return true;
+            if (queens != 0 || WhiteBishops != 0)
+            {
+                ulong bishopAttacks = MagicBitboards.GetBishopAttacks(square, occupancy);
+                if ((bishopAttacks & (WhiteBishops | queens)) != 0)
+                    return true;
+            }
+
+            if (queens != 0 || WhiteRooks != 0)
+            {
+                ulong rookAttacks = MagicBitboards.GetRookAttacks(square, occupancy);
+                if ((rookAttacks & (WhiteRooks | queens)) != 0)
+                    return true;
+            }
         }
         else
         {
-            // Pawn attacks
-            if ((BitboardConstants.WhitePawnAttacks[square] & BlackPawns) != 0) return true;
+            // Check pawn attacks first (most common)
+            if ((BitboardConstants.WhitePawnAttacks[square] & BlackPawns) != 0)
+                return true;
 
             // Knight attacks
-            if ((BitboardConstants.KnightMoves[square] & BlackKnights) != 0) return true;
+            if ((BitboardConstants.KnightMoves[square] & BlackKnights) != 0)
+                return true;
 
             // King attacks
-            if ((BitboardConstants.KingMoves[square] & BlackKing) != 0) return true;
+            if ((BitboardConstants.KingMoves[square] & BlackKing) != 0)
+                return true;
 
-            // Bishop/Queen attacks
-            ulong bishopAttacks = MagicBitboards.GetBishopAttacks(square, occupancy);
-            if ((bishopAttacks & (BlackBishops | BlackQueens)) != 0) return true;
+            // Sliding pieces - combine similar attack patterns
+            ulong queens = BlackQueens;
 
-            // Rook/Queen attacks
-            ulong rookAttacks = MagicBitboards.GetRookAttacks(square, occupancy);
-            if ((rookAttacks & (BlackRooks | BlackQueens)) != 0) return true;
+            if (queens != 0 || BlackBishops != 0)
+            {
+                ulong bishopAttacks = MagicBitboards.GetBishopAttacks(square, occupancy);
+                if ((bishopAttacks & (BlackBishops | queens)) != 0)
+                    return true;
+            }
+
+            if (queens != 0 || BlackRooks != 0)
+            {
+                ulong rookAttacks = MagicBitboards.GetRookAttacks(square, occupancy);
+                if ((rookAttacks & (BlackRooks | queens)) != 0)
+                    return true;
+            }
         }
 
         return false;
     }
+    static int[] index64 =
+    {
+            0, 47,  1, 56, 48, 27,  2, 60,
+           57, 49, 41, 37, 28, 16,  3, 61,
+           54, 58, 35, 52, 50, 42, 21, 44,
+           38, 32, 29, 23, 17, 11,  4, 62,
+           46, 55, 26, 59, 40, 36, 15, 53,
+           34, 51, 20, 43, 31, 22, 10, 45,
+           25, 39, 14, 33, 19, 30,  9, 24,
+           13, 18,  8, 12,  7,  6,  5, 63
+     };
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly bool IsInCheck()
+    public readonly bool IsInCheckFast()
     {
-        ulong kingBitboard = SideToMove == Color.White ? WhiteKing : BlackKing;
+        // Get king position without PopCount
+        ulong kingBB = SideToMove == Color.White ? WhiteKing : BlackKing;
 
-        // Safety check - should never happen in a valid position
-        if (kingBitboard == 0) return false;
+        // Use De Bruijn sequence for fast bit scan
+        const ulong debruijn64 = 0x03f79d71b4cb0a89UL;
 
-        int kingSquare = BitboardConstants.BitScanForward(kingBitboard);
+
+        int kingSquare = index64[((kingBB ^ (kingBB - 1)) * debruijn64) >> 58];
+
         return IsSquareAttacked(kingSquare, SideToMove == Color.White ? Color.Black : Color.White);
     }
 
+    // Update castling rights with lookup table
+    static readonly byte[] CastlingRightsMask = new byte[64]
+    {
+        0b1101, 0xFF, 0xFF, 0xFF, 0b1100, 0xFF, 0xFF, 0b1110, // Rank 1
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,         // Rank 2
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,         // Rank 3
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,         // Rank 4
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,         // Rank 5
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,         // Rank 6
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,         // Rank 7
+        0b0111, 0xFF, 0xFF, 0xFF, 0b0011, 0xFF, 0xFF, 0b1011   // Rank 8
+    };
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void MakeMove(Move move)
     {
         int from = move.From;
         int to = move.To;
-        var (piece, color) = GetPieceAt(from);
 
-        // Remove piece from source square
+        // Use a single GetPieceAt call and cache the result
         ulong fromBit = 1UL << from;
         ulong toBit = 1UL << to;
         ulong fromToBit = fromBit | toBit;
 
-        // Handle captures
-        if (move.IsCapture && !move.IsEnPassant)
+        // Determine piece type and color more efficiently
+        PieceType piece;
+        Color color = SideToMove;
+
+        // Quick piece identification using bit operations
+        if (color == Color.White)
         {
-            var (capturedPiece, capturedColor) = GetPieceAt(to);
-            ulong capturedBitboard = GetPieceBitboard(capturedPiece, capturedColor);
-            SetPieceBitboard(capturedPiece, capturedColor, capturedBitboard & ~toBit);
+            if ((WhitePawns & fromBit) != 0) piece = PieceType.Pawn;
+            else if ((WhiteKnights & fromBit) != 0) piece = PieceType.Knight;
+            else if ((WhiteBishops & fromBit) != 0) piece = PieceType.Bishop;
+            else if ((WhiteRooks & fromBit) != 0) piece = PieceType.Rook;
+            else if ((WhiteQueens & fromBit) != 0) piece = PieceType.Queen;
+            else piece = PieceType.King;
+        }
+        else
+        {
+            if ((BlackPawns & fromBit) != 0) piece = PieceType.Pawn;
+            else if ((BlackKnights & fromBit) != 0) piece = PieceType.Knight;
+            else if ((BlackBishops & fromBit) != 0) piece = PieceType.Bishop;
+            else if ((BlackRooks & fromBit) != 0) piece = PieceType.Rook;
+            else if ((BlackQueens & fromBit) != 0) piece = PieceType.Queen;
+            else piece = PieceType.King;
         }
 
-        // Move the piece
-        ulong pieceBitboard = GetPieceBitboard(piece, color);
-        SetPieceBitboard(piece, color, pieceBitboard ^ fromToBit);
-
+        // Handle captures first (most common case after quiet moves)
         if (move.IsCapture && !move.IsEnPassant)
         {
-            // Check if we're capturing a rook on its starting square
-            if (to == 0) CastlingRights &= ~CastlingRights.WhiteQueenside;
-            else if (to == 7) CastlingRights &= ~CastlingRights.WhiteKingside;
-            else if (to == 56) CastlingRights &= ~CastlingRights.BlackQueenside;
-            else if (to == 63) CastlingRights &= ~CastlingRights.BlackKingside;
+            // Remove captured piece - avoid GetPieceAt call
+            if (color == Color.White)
+            {
+                if ((BlackPawns & toBit) != 0) BlackPawns &= ~toBit;
+                else if ((BlackKnights & toBit) != 0) BlackKnights &= ~toBit;
+                else if ((BlackBishops & toBit) != 0) BlackBishops &= ~toBit;
+                else if ((BlackRooks & toBit) != 0)
+                {
+                    BlackRooks &= ~toBit;
+                    // Update castling rights for rook capture
+                    if (to == 56) CastlingRights &= ~CastlingRights.BlackQueenside;
+                    else if (to == 63) CastlingRights &= ~CastlingRights.BlackKingside;
+                }
+                else if ((BlackQueens & toBit) != 0) BlackQueens &= ~toBit;
+            }
+            else
+            {
+                if ((WhitePawns & toBit) != 0) WhitePawns &= ~toBit;
+                else if ((WhiteKnights & toBit) != 0) WhiteKnights &= ~toBit;
+                else if ((WhiteBishops & toBit) != 0) WhiteBishops &= ~toBit;
+                else if ((WhiteRooks & toBit) != 0)
+                {
+                    WhiteRooks &= ~toBit;
+                    // Update castling rights for rook capture
+                    if (to == 0) CastlingRights &= ~CastlingRights.WhiteQueenside;
+                    else if (to == 7) CastlingRights &= ~CastlingRights.WhiteKingside;
+                }
+                else if ((WhiteQueens & toBit) != 0) WhiteQueens &= ~toBit;
+            }
+        }
+
+        // Move the piece using XOR (works for both quiet and capture moves)
+        if (color == Color.White)
+        {
+            switch (piece)
+            {
+                case PieceType.Pawn: WhitePawns ^= fromToBit; break;
+                case PieceType.Knight: WhiteKnights ^= fromToBit; break;
+                case PieceType.Bishop: WhiteBishops ^= fromToBit; break;
+                case PieceType.Rook: WhiteRooks ^= fromToBit; break;
+                case PieceType.Queen: WhiteQueens ^= fromToBit; break;
+                case PieceType.King: WhiteKing ^= fromToBit; break;
+            }
+        }
+        else
+        {
+            switch (piece)
+            {
+                case PieceType.Pawn: BlackPawns ^= fromToBit; break;
+                case PieceType.Knight: BlackKnights ^= fromToBit; break;
+                case PieceType.Bishop: BlackBishops ^= fromToBit; break;
+                case PieceType.Rook: BlackRooks ^= fromToBit; break;
+                case PieceType.Queen: BlackQueens ^= fromToBit; break;
+                case PieceType.King: BlackKing ^= fromToBit; break;
+            }
         }
 
         // Handle special moves
-        if (move.IsEnPassant)
+        if (move.IsPromotion)
         {
-            int captureSquare = to + (color == Color.White ? -8 : 8);
-            ulong captureBit = 1UL << captureSquare;
-            if (color == Color.White)
-                BlackPawns &= ~captureBit;
-            else
-                WhitePawns &= ~captureBit;
-        }
-        else if (move.IsCastling)
-        {
-            // Move the rook
-            if (to > from) // Kingside
-            {
-                int rookFrom = to + 1;
-                int rookTo = to - 1;
-                ulong rookFromToBit = 1UL << rookFrom | 1UL << rookTo;
-                if (color == Color.White)
-                    WhiteRooks ^= rookFromToBit;
-                else
-                    BlackRooks ^= rookFromToBit;
-            }
-            else // Queenside
-            {
-                int rookFrom = to - 2;
-                int rookTo = to + 1;
-                ulong rookFromToBit = 1UL << rookFrom | 1UL << rookTo;
-                if (color == Color.White)
-                    WhiteRooks ^= rookFromToBit;
-                else
-                    BlackRooks ^= rookFromToBit;
-            }
-        }
-        else if (move.IsPromotion)
-        {
-            // Remove pawn and add promoted piece
+            // Remove pawn, add promoted piece
             if (color == Color.White)
             {
                 WhitePawns &= ~toBit;
@@ -329,22 +410,42 @@ public struct Board
                 }
             }
         }
-
-        // Update castling rights
-        if (piece == PieceType.King)
+        else if (move.IsEnPassant)
         {
+            int captureSquare = to + (color == Color.White ? -8 : 8);
             if (color == Color.White)
-                CastlingRights &= ~(CastlingRights.WhiteKingside | CastlingRights.WhiteQueenside);
+                BlackPawns &= ~(1UL << captureSquare);
             else
-                CastlingRights &= ~(CastlingRights.BlackKingside | CastlingRights.BlackQueenside);
+                WhitePawns &= ~(1UL << captureSquare);
         }
-        else if (piece == PieceType.Rook)
+        else if (move.IsCastling)
         {
-            if (from == 0) CastlingRights &= ~CastlingRights.WhiteQueenside;
-            else if (from == 7) CastlingRights &= ~CastlingRights.WhiteKingside;
-            else if (from == 56) CastlingRights &= ~CastlingRights.BlackQueenside;
-            else if (from == 63) CastlingRights &= ~CastlingRights.BlackKingside;
+            // Optimized castling - use precomputed rook moves
+            if (color == Color.White)
+            {
+                if (to == 6) // Kingside
+                {
+                    WhiteRooks ^= 0xA0UL; // Move rook from h1 to f1
+                }
+                else // Queenside
+                {
+                    WhiteRooks ^= 0x09UL; // Move rook from a1 to d1
+                }
+            }
+            else
+            {
+                if (to == 62) // Kingside
+                {
+                    BlackRooks ^= 0xA000000000000000UL; // Move rook from h8 to f8
+                }
+                else // Queenside
+                {
+                    BlackRooks ^= 0x0900000000000000UL; // Move rook from a8 to d8
+                }
+            }
         }
+
+        CastlingRights &= (CastlingRights)(CastlingRightsMask[from] & CastlingRightsMask[to]);
 
         // Update en passant square
         EnPassantSquare = move.IsDoublePush ? (from + to) / 2 : -1;
@@ -359,7 +460,7 @@ public struct Board
             FullmoveNumber++;
 
         // Switch side to move
-        SideToMove = SideToMove == Color.White ? Color.Black : Color.White;
+        SideToMove ^= (Color)1; // Flip between 0 and 1
 
         // Update aggregate bitboards
         UpdateAggregateBitboards();
