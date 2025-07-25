@@ -229,7 +229,7 @@ public class Search
         const int NullMoveReduction = 3;
 
         if (!isPvNode &&
-            !board.IsInCheck() &&
+            !board.IsInCheckFast() &&
             depth >= NullMoveReduction + 1 &&
             ply > 0 &&
             board.HasNonPawnMaterial())
@@ -278,7 +278,7 @@ public class Search
         if (moves.Count == 0)
         {
             // Checkmate or stalemate
-            return board.IsInCheck() ? -MateScore + ply : DrawScore;
+            return board.IsInCheckFast() ? -MateScore + ply : DrawScore;
         }
 
         // Order moves
@@ -312,7 +312,7 @@ public class Search
             {
                 // Late move reduction
                 int reduction = 0;
-                if (depth >= 3 && i >= 4 && !move.IsCapture && !move.IsPromotion && !board.IsInCheck())
+                if (depth >= 3 && i >= 4 && !move.IsCapture && !move.IsPromotion && !board.IsInCheckFast())
                     reduction = 1;
 
                 // Search with null window
