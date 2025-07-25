@@ -20,20 +20,29 @@ public class Search
     private bool _stop;
     private int _selDepth;
 
-    // Add fields for periodic info output
+    // Optimization: Check time less frequently
+    private const int TimeCheckMask = 0x3FFF; // Check every 16384 nodes
+
     private long _lastInfoTime;
-    private const long InfoInterval = 1000; // Output info every 1000ms
+    private const long InfoInterval = 1000;
 
     // Principal variation
     private readonly Move[,] _pvTable = new Move[MaxDepth, MaxDepth];
     private readonly int[] _pvLength = new int[MaxDepth];
 
-    // Best move from completed iteration
     private Move _iterationBestMove;
     private int _iterationBestScore;
-
-    // For hashfull calculation
     private int _hashfull = 0;
+
+    // History for repetition detection  
+    private readonly ulong[] _hashHistory = new ulong[1024];
+    private int _hashHistoryCount = 0;
+
+    // Pre-allocated for move generation
+    private readonly MoveList[] _moveLists = new MoveList[MaxDepth];
+
+    // Futility margins
+    private static readonly int[] FutilityMargins = { 0, 100, 200, 300, 400, 500 };
 
     public Search(int ttSizeMb = 128)
     {
@@ -51,11 +60,15 @@ public class Search
         _selDepth = 0;
         _lastInfoTime = 0;
         _hashfull = 0;
+        _hashHistoryCount = 0;
+
+        // Add initial position to history
+        _hashHistory[_hashHistoryCount++] = board.GetZobristHash();
 
         Move bestMove = default;
         int bestScore = -Infinity;
 
-        // Generate initial moves to get a valid first move
+        // Generate initial moves
         MoveList initialMoves = new MoveList();
         MoveGenerator.GenerateMoves(ref board, ref initialMoves);
         if (initialMoves.Count > 0)
@@ -63,48 +76,92 @@ public class Search
             bestMove = initialMoves[0];
         }
 
+        // Aspiration window
+        int alpha = -Infinity;
+        int beta = Infinity;
+        int aspirationDelta = 50;
+
         // Iterative deepening
         for (int depth = 1; depth <= maxDepth && !_stop; depth++)
         {
-            // Reset for this iteration
             _selDepth = 0;
             _iterationBestMove = bestMove;
             _iterationBestScore = bestScore;
 
-            // Clear PV for new iteration
             Array.Clear(_pvLength, 0, _pvLength.Length);
             Array.Clear(_pvTable, 0, _pvTable.Length);
 
-            int score = AlphaBeta(ref board, depth, -Infinity, Infinity, 0, true);
+            // Aspiration window search
+            if (depth >= 4 && Math.Abs(bestScore) < MateScore - 1000)
+            {
+                alpha = bestScore - aspirationDelta;
+                beta = bestScore + aspirationDelta;
+            }
+            else
+            {
+                alpha = -Infinity;
+                beta = Infinity;
+            }
+
+            while (true)
+            {
+                int score = AlphaBeta(ref board, depth, alpha, beta, 0, true);
+
+                if (_stop) break;
+
+                // Handle aspiration window failures
+                if (score <= alpha)
+                {
+                    alpha = Math.Max(alpha - aspirationDelta, -Infinity);
+                    aspirationDelta = Math.Min(aspirationDelta * 2, 500);
+                }
+                else if (score >= beta)
+                {
+                    beta = Math.Min(beta + aspirationDelta, Infinity);
+                    aspirationDelta = Math.Min(aspirationDelta * 2, 500);
+                }
+                else
+                {
+                    bestScore = score;
+                    if (_pvLength[0] > 0)
+                    {
+                        bestMove = _pvTable[0, 0];
+                    }
+                    break;
+                }
+            }
 
             if (!_stop)
             {
-                bestScore = score;
-                if (_pvLength[0] > 0)
-                {
-                    bestMove = _pvTable[0, 0];
-                }
-
-                // Send info after completing each depth
                 SendInfo(depth, _selDepth, bestScore, GetPvString());
             }
 
-            // Check time after each iteration
-            if (_timeAllocated != long.MaxValue && _timer.ElapsedMilliseconds >= _timeAllocated)
+            // Time management
+            if (_timeAllocated != long.MaxValue)
             {
-                _stop = true;
-                break;
+                long elapsed = _timer.ElapsedMilliseconds;
+
+                // Stop early if we've used significant time
+                if (elapsed >= _timeAllocated * 0.4 && depth >= 4)
+                {
+                    _stop = true;
+                    break;
+                }
+
+                if (elapsed >= _timeAllocated)
+                {
+                    _stop = true;
+                    break;
+                }
             }
         }
 
-        // Always send bestmove at the end
         if (bestMove != default)
         {
             Console.WriteLine($"bestmove {bestMove}");
         }
         else
         {
-            // Emergency fallback
             Console.WriteLine("bestmove 0000");
         }
         Console.Out.Flush();
@@ -112,89 +169,55 @@ public class Search
         return bestMove;
     }
 
-    private void SendInfo(int depth, int selDepth, int score, string pv)
-    {
-        long time = _timer.ElapsedMilliseconds;
-        long nps = time > 0 ? (_nodes * 1000) / time : _nodes;
-
-        string scoreStr = FormatScore(score);
-
-        // Calculate approximate hashfull (simplified)
-        _hashfull = Math.Min(999, (int)(_nodes / 1000));
-
-        // Send the actual search information
-        Console.WriteLine($"info depth {depth} seldepth {selDepth} score {scoreStr} " +
-                        $"nodes {_nodes} nps {nps} hashfull {_hashfull} " +
-                        $"time {time} pv {pv}");
-        Console.Out.Flush();
-    }
-
-    private void SendPeriodicInfo()
-    {
-        long time = _timer.ElapsedMilliseconds;
-        if (time - _lastInfoTime < InfoInterval)
-            return;
-
-        _lastInfoTime = time;
-        long nps = time > 0 ? (_nodes * 1000) / time : _nodes;
-
-        Console.WriteLine($"info nodes {_nodes} nps {nps} time {time}");
-        Console.Out.Flush();
-    }
-
-    private void SendCurrMoveInfo(Move move, int moveNumber)
-    {
-        long time = _timer.ElapsedMilliseconds;
-        Console.WriteLine($"info currmove {move} currmovenumber {moveNumber}");
-        Console.Out.Flush();
-    }
-
-    private string FormatScore(int score)
-    {
-        if (Math.Abs(score) >= MateScore - 1000)
-        {
-            int mateIn = (MateScore - Math.Abs(score) + 1) / 2;
-            return score > 0 ? $"mate {mateIn}" : $"mate -{mateIn}";
-        }
-        else
-        {
-            return $"cp {score}";
-        }
-    }
-
     private int AlphaBeta(ref Board board, int depth, int alpha, int beta, int ply, bool isPvNode)
     {
-        // Initialize PV length for this ply
         _pvLength[ply] = ply;
 
-        // Check for periodic updates
-        if ((_nodes & 4095) == 0) // Check every 4096 nodes
+        // Check time less frequently
+        if ((_nodes & TimeCheckMask) == 0)
         {
             long currentTime = _timer.ElapsedMilliseconds;
 
-            // Check timeout
             if (_timeAllocated != long.MaxValue && currentTime > _timeAllocated)
             {
                 _stop = true;
                 return 0;
             }
 
-            // Send periodic info for long searches at root
+            // Send periodic info for long searches
             if (ply == 0 && currentTime - _lastInfoTime >= InfoInterval)
             {
                 SendPeriodicInfo();
             }
         }
 
-        // Draw by repetition or 50-move rule
-        if (ply > 0 && (board.HalfmoveClock >= 100 || IsRepetition(ref board)))
-            return DrawScore;
+        // Quick draw detection
+        if (ply > 0)
+        {
+            if (board.HalfmoveClock >= 100)
+                return DrawScore;
+
+            // Simplified repetition check
+            ulong currentHash = board.GetZobristHash();
+            int repCount = 0;
+            for (int i = _hashHistoryCount - 2; i >= 0 && i >= _hashHistoryCount - board.HalfmoveClock; i -= 2)
+            {
+                if (_hashHistory[i] == currentHash)
+                {
+                    repCount++;
+                    if (repCount >= 2)
+                        return DrawScore;
+                }
+            }
+        }
 
         // Mate distance pruning
-        alpha = Math.Max(alpha, -MateScore + ply);
-        beta = Math.Min(beta, MateScore - ply - 1);
-        if (alpha >= beta)
-            return alpha;
+        int matedScore = -MateScore + ply;
+        int mateScore = MateScore - ply - 1;
+        if (matedScore >= beta) return beta;
+        if (mateScore <= alpha) return alpha;
+        alpha = Math.Max(alpha, matedScore);
+        beta = Math.Min(beta, mateScore);
 
         // Transposition table probe
         ulong hash = board.GetZobristHash();
@@ -203,6 +226,7 @@ public class Search
 
         if (ttEntry.Hash == hash && ttEntry.Depth >= depth && !isPvNode)
         {
+            ttMove = ttEntry.Move;
             int ttScore = ttEntry.Score;
 
             // Adjust mate scores
@@ -225,34 +249,47 @@ public class Search
         if (ttEntry.Hash == hash)
             ttMove = ttEntry.Move;
 
-        // Null move pruning
-        const int NullMoveReduction = 3;
+        // Drop into quiescence
+        if (depth <= 0)
+            return Quiescence(ref board, alpha, beta, ply);
 
-        if (!isPvNode &&
-            !board.IsInCheckFast() &&
-            depth >= NullMoveReduction + 1 &&
-            ply > 0 &&
-            board.HasNonPawnMaterial())
+        _nodes++;
+        if (ply > _selDepth)
+            _selDepth = ply;
+
+        bool inCheck = board.IsInCheckFast();
+        int eval = inCheck ? -Infinity : Evaluation.Evaluate(ref board);
+
+        // Reverse futility pruning (static null move pruning)
+        if (!isPvNode && !inCheck && depth <= 6 &&
+            eval - FutilityMargins[depth] >= beta)
         {
-            // Make null move (just switch sides)
+            return eval;
+        }
+
+        // Null move pruning
+        if (!isPvNode && !inCheck && depth >= 3 && ply > 0 &&
+            board.HasNonPawnMaterial() && eval >= beta)
+        {
+            int R = 3 + depth / 6 + Math.Min((eval - beta) / 200, 3);
+
             Board nullBoard = board;
-            nullBoard.SideToMove = nullBoard.SideToMove == Color.White ? Color.Black : Color.White;
-            nullBoard.EnPassantSquare = -1; // Clear en passant
+            nullBoard.SideToMove ^= (Color)1;
+            nullBoard.EnPassantSquare = -1;
             nullBoard.HalfmoveClock++;
+            if (nullBoard.SideToMove == Color.Black)
+                nullBoard.FullmoveNumber++;
 
-            // Search with reduced depth
-            int nullScore = -AlphaBeta(ref nullBoard, depth - NullMoveReduction - 1, -beta, -beta + 1, ply + 1, false);
+            int nullScore = -AlphaBeta(ref nullBoard, depth - R - 1, -beta, -beta + 1, ply + 1, false);
 
-            if (_stop)
-                return 0;
+            if (_stop) return 0;
 
-            // If null move causes a beta cutoff, we can prune
             if (nullScore >= beta)
             {
-                // Verification search for high depths to avoid zugzwang
-                if (depth > 6)
+                // Verification at high depths
+                if (depth > 12)
                 {
-                    int verifyScore = AlphaBeta(ref board, depth - NullMoveReduction, alpha, beta, ply, false);
+                    int verifyScore = AlphaBeta(ref board, depth - R, beta - 1, beta, ply, false);
                     if (verifyScore >= beta)
                         return beta;
                 }
@@ -263,22 +300,13 @@ public class Search
             }
         }
 
-        // Leaf node - return evaluation
-        if (depth <= 0)
-            return Quiescence(ref board, alpha, beta, ply);
-
-        _nodes++;
-        if (ply > _selDepth)
-            _selDepth = ply;
-
-        // Generate and order moves
+        // Generate moves
         MoveList moves = new MoveList();
         MoveGenerator.GenerateMoves(ref board, ref moves);
 
         if (moves.Count == 0)
         {
-            // Checkmate or stalemate
-            return board.IsInCheckFast() ? -MateScore + ply : DrawScore;
+            return inCheck ? -MateScore + ply : DrawScore;
         }
 
         // Order moves
@@ -287,44 +315,67 @@ public class Search
         Move bestMove = default;
         int bestScore = -Infinity;
         TTFlag flag = TTFlag.UpperBound;
+        int movesSearched = 0;
 
         for (int i = 0; i < moves.Count; i++)
         {
             Move move = moves[i];
 
-            // Send current move info at root for deeper searches
-            if (ply == 0 && depth > 5 && i > 0 && _timer.ElapsedMilliseconds > 100)
+            // Send current move info at root
+            if (ply == 0 && depth > 5 && i > 0 && _timer.ElapsedMilliseconds > 500)
             {
                 SendCurrMoveInfo(move, i + 1);
+            }
+
+            // Futility pruning
+            if (!isPvNode && !inCheck && !move.IsCapture && !move.IsPromotion &&
+                depth <= 3 && movesSearched >= 4 &&
+                eval + FutilityMargins[depth] + 100 <= alpha)
+            {
+                continue;
             }
 
             Board newBoard = board;
             newBoard.MakeMove(move);
 
+            _hashHistory[_hashHistoryCount++] = newBoard.GetZobristHash();
+
             int score;
 
-            // Principal variation search
-            if (i == 0)
+            // Principal variation search with reductions
+            if (movesSearched == 0)
             {
                 score = -AlphaBeta(ref newBoard, depth - 1, -beta, -alpha, ply + 1, isPvNode);
             }
             else
             {
-                // Late move reduction
                 int reduction = 0;
-                if (depth >= 3 && i >= 4 && !move.IsCapture && !move.IsPromotion && !board.IsInCheckFast())
+
+                // Late move reduction
+                if (depth >= 3 && movesSearched >= 3 && !move.IsCapture &&
+                    !move.IsPromotion && !inCheck && !newBoard.IsInCheckFast())
+                {
                     reduction = 1;
+                    if (movesSearched >= 6) reduction++;
+                    if (depth >= 6 && movesSearched >= 10) reduction++;
+
+                    reduction = Math.Min(reduction, depth - 2);
+                }
 
                 // Search with null window
                 score = -AlphaBeta(ref newBoard, depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, false);
 
-                // Re-search if it improves alpha
+                // Re-search if needed
                 if (score > alpha && (reduction > 0 || score < beta))
+                {
                     score = -AlphaBeta(ref newBoard, depth - 1, -beta, -alpha, ply + 1, isPvNode);
+                }
             }
 
-            if (_stop)
-                return 0;
+            _hashHistoryCount--;
+            movesSearched++;
+
+            if (_stop) return 0;
 
             if (score > bestScore)
             {
@@ -336,10 +387,8 @@ public class Search
                     alpha = score;
                     flag = TTFlag.Exact;
 
-                    // Update PV
                     UpdatePV(ply, move);
 
-                    // Update iteration best at root
                     if (ply == 0)
                     {
                         _iterationBestMove = move;
@@ -350,9 +399,11 @@ public class Search
                     {
                         flag = TTFlag.LowerBound;
 
-                        // Update killer moves and history
                         if (!move.IsCapture)
+                        {
                             _moveOrdering.UpdateKillers(move, ply);
+                            _moveOrdering.UpdateHistory(move, depth);
+                        }
 
                         break;
                     }
@@ -360,7 +411,7 @@ public class Search
             }
         }
 
-        // Store in transposition table
+        // Store in TT
         int storeScore = bestScore;
         if (bestScore > MateScore - 100)
             storeScore += ply;
@@ -372,34 +423,15 @@ public class Search
         return bestScore;
     }
 
-    private void UpdatePV(int ply, Move move)
-    {
-        // Store the move at current ply
-        _pvTable[ply, ply] = move;
-
-        // Copy the PV from the next ply
-        for (int i = ply + 1; i < _pvLength[ply + 1]; i++)
-        {
-            _pvTable[ply, i] = _pvTable[ply + 1, i];
-        }
-
-        // Update PV length
-        _pvLength[ply] = _pvLength[ply + 1];
-    }
-
     private int Quiescence(ref Board board, int alpha, int beta, int ply)
     {
         _nodes++;
 
-        // Check time periodically in quiescence too
-        if ((_nodes & 8191) == 0)
+        if ((_nodes & 0x1FFF) == 0 && _timeAllocated != long.MaxValue &&
+            _timer.ElapsedMilliseconds > _timeAllocated)
         {
-            long currentTime = _timer.ElapsedMilliseconds;
-            if (_timeAllocated != long.MaxValue && currentTime > _timeAllocated)
-            {
-                _stop = true;
-                return 0;
-            }
+            _stop = true;
+            return 0;
         }
 
         int standPat = Evaluation.Evaluate(ref board);
@@ -407,19 +439,24 @@ public class Search
         if (standPat >= beta)
             return beta;
 
+        // Delta pruning
+        const int BigDelta = 900;
+        if (standPat + BigDelta < alpha)
+            return alpha;
+
         if (standPat > alpha)
             alpha = standPat;
 
-        // Generate only captures
+        // Generate all moves and filter captures
         MoveList moves = new MoveList();
         MoveGenerator.GenerateMoves(ref board, ref moves);
 
+        // Score captures with MVV-LVA
         for (int i = 0; i < moves.Count; i++)
         {
             Move move = moves[i];
 
-            // Only search captures in quiescence
-            if (!move.IsCapture)
+            if (!move.IsCapture && !move.IsPromotion)
                 continue;
 
             Board newBoard = board;
@@ -427,8 +464,7 @@ public class Search
 
             int score = -Quiescence(ref newBoard, -beta, -alpha, ply + 1);
 
-            if (_stop)
-                return 0;
+            if (_stop) return 0;
 
             if (score >= beta)
                 return beta;
@@ -440,15 +476,62 @@ public class Search
         return alpha;
     }
 
-    private bool IsRepetition(ref Board board)
+    private void UpdatePV(int ply, Move move)
     {
-        // TODO: Implement proper repetition detection
-        return false;
+        _pvTable[ply, ply] = move;
+
+        for (int i = ply + 1; i < _pvLength[ply + 1]; i++)
+        {
+            _pvTable[ply, i] = _pvTable[ply + 1, i];
+        }
+
+        _pvLength[ply] = _pvLength[ply + 1];
+    }
+
+    private void SendInfo(int depth, int selDepth, int score, string pv)
+    {
+        long time = _timer.ElapsedMilliseconds;
+        long nps = time > 0 ? (_nodes * 1000) / time : _nodes;
+
+        string scoreStr = FormatScore(score);
+        _hashfull = _tt.Usage();
+
+        Console.WriteLine($"info depth {depth} seldepth {selDepth} score {scoreStr} " +
+                        $"nodes {_nodes} nps {nps} hashfull {_hashfull} " +
+                        $"time {time} pv {pv}");
+        Console.Out.Flush();
+    }
+
+    private void SendPeriodicInfo()
+    {
+        long time = _timer.ElapsedMilliseconds;
+
+        _lastInfoTime = time;
+        long nps = time > 0 ? (_nodes * 1000) / time : _nodes;
+
+        Console.WriteLine($"info nodes {_nodes} nps {nps} time {time}");
+        Console.Out.Flush();
+    }
+
+    private void SendCurrMoveInfo(Move move, int moveNumber)
+    {
+        Console.WriteLine($"info currmove {move} currmovenumber {moveNumber}");
+        Console.Out.Flush();
+    }
+
+    private string FormatScore(int score)
+    {
+        if (Math.Abs(score) >= MateScore - 1000)
+        {
+            int mateIn = (MateScore - Math.Abs(score) + 1) / 2;
+            return score > 0 ? $"mate {mateIn}" : $"mate -{mateIn}";
+        }
+        return $"cp {score}";
     }
 
     private string GetPvString()
     {
-        System.Text.StringBuilder pv = new System.Text.StringBuilder();
+        var pv = new System.Text.StringBuilder();
 
         for (int i = 0; i < _pvLength[0]; i++)
         {
@@ -471,5 +554,7 @@ public class Search
     public void ClearHash()
     {
         _tt.Clear();
+        _moveOrdering.ClearHistory();
+        _moveOrdering.ClearKillers();
     }
 }

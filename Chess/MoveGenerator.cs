@@ -141,6 +141,7 @@ public static class MoveGenerator
         GenerateWhiteCastlingMoves(ref board, ref moves);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void GenerateLegalMoves(ref Board board, ref MoveList moves)
     {
         moves.Clear();
@@ -213,7 +214,7 @@ public static class MoveGenerator
             GenerateSlidingMovesLegal(ref board, ref moves, board.BlackRooks & ~pinned, checkMask, false, true, us);
             GenerateSlidingMovesLegal(ref board, ref moves, board.BlackQueens & ~pinned, checkMask, true, true, us);
 
-            // Pinned sliding pieces can only move along the pin ray
+            // Pinned sliding pieces
             GeneratePinnedSlidingMoves(ref board, ref moves, board.BlackBishops & pinned, kingSquare, true, false, us);
             GeneratePinnedSlidingMoves(ref board, ref moves, board.BlackRooks & pinned, kingSquare, false, true, us);
             GeneratePinnedSlidingMoves(ref board, ref moves, board.BlackQueens & pinned, kingSquare, true, true, us);
