@@ -217,7 +217,7 @@ namespace Chess
 
             // Test check detection
             board = FenParser.ParseFen("4k3/8/8/8/8/8/4R3/4K3 b - - 0 1");
-            Assert("Black king in check", board.IsInCheck());
+            Assert("Black king in check", board.IsInCheckFast());
         }
 
         private static void TestFenParsing()
