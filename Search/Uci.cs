@@ -25,8 +25,6 @@ namespace Search
 
         public async Task Run()
         {
-            Console.WriteLine("Chess Engine by Assistant");
-
             string? line;
             while ((line = Console.ReadLine()) != null)
             {
@@ -78,10 +76,10 @@ namespace Search
 
         private void HandleUci()
         {
-            Console.WriteLine("id name CE");
+            Console.WriteLine("id name CE2");
             Console.WriteLine("id author Assistant");
             Console.WriteLine("option name Hash type spin default 128 min 1 max 16384");
-            Console.WriteLine("option name Threads type spin default 1 min 1 max 256");
+            Console.WriteLine("option name Threads type spin default 1 min 1 max 1");
             Console.WriteLine("uciok");
         }
 
@@ -201,7 +199,6 @@ namespace Search
                     case "infinite":
                         limits.Infinite = true;
                         hasTimeControl = true;
-                        Console.WriteLine("info string infinite search mode enabled");
                         break;
                 }
             }
@@ -211,13 +208,11 @@ namespace Search
             {
                 limits.Depth = 12;  // Reasonable depth limit
                 limits.MoveTime = 5000;  // 5 seconds per move
-                Console.WriteLine("info string using default time control: depth 12, 5000ms");
             }
 
             // Debug output for infinite search
             if (limits.Infinite)
             {
-                Console.WriteLine("info string starting infinite search");
             }
 
             // Stop any ongoing search

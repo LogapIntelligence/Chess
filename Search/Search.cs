@@ -132,7 +132,6 @@ namespace Search
 
                 while (failCount < MAX_ASPIRATION_RETRIES)
                 {
-                    Console.WriteLine("Here");
                     bestScore = SearchRoot(depth, alpha, beta, rootMoves);
 
                     // Check aspiration window failure
@@ -143,9 +142,6 @@ namespace Search
                         alpha = Math.Max(-INFINITY, bestScore - aspWindow);
                         aspWindow = aspWindow + aspWindow / 2; // Increase window by 50%
                         failCount++;
-
-                        Console.WriteLine($"info string fail low at depth {depth}, score {bestScore}, " +
-                                        $"new window [{alpha},{beta}], retry {failCount}");
                     }
                     else if (bestScore >= beta)
                     {
@@ -154,9 +150,6 @@ namespace Search
                         beta = Math.Min(INFINITY, bestScore + aspWindow);
                         aspWindow = aspWindow + aspWindow / 2; // Increase window by 50%
                         failCount++;
-
-                        Console.WriteLine($"info string fail high at depth {depth}, score {bestScore}, " +
-                                        $"new window [{alpha},{beta}], retry {failCount}");
                     }
                     else
                     {
@@ -183,8 +176,6 @@ namespace Search
                         {
                             alpha = -INFINITY;
                             beta = INFINITY;
-                            Console.WriteLine($"info string using full window at depth {depth} after {failCount} retries");
-                            bestScore = SearchRoot(depth, alpha, beta, rootMoves);
                         }
                         break;
                     }
@@ -209,14 +200,12 @@ namespace Search
                     // Early exit conditions
                     if (Math.Abs(bestScore) >= MATE_VALUE - 100)
                     {
-                        Console.WriteLine($"info string mate found, stopping search");
                         break;
                     }
 
                     // Time management - be more careful about when to stop
                     if (timeManager.ShouldStop())
                     {
-                        Console.WriteLine($"info string time limit reached, stopping search");
                         break;
                     }
 
@@ -229,14 +218,12 @@ namespace Search
 
                         if (timeManager.ElapsedMs() + estimatedNextDepthTime > timeManager.GetAllocatedTime())
                         {
-                            Console.WriteLine($"info string insufficient time for next iteration, stopping search");
                             break;
                         }
                     }
                 }
                 else
                 {
-                    Console.WriteLine($"info string search stopped at depth {depth}");
                     break;
                 }
             }
@@ -246,11 +233,6 @@ namespace Search
 
         private int SearchRoot(int depth, int alpha, int beta, List<RootMove> rootMoves)
         {
-            if (depth > 11)
-            {
-
-            }
-            Console.WriteLine("Search Root");
             var bestScore = -INFINITY;
             pvLength[0] = 0;
 
