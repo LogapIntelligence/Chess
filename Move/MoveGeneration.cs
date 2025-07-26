@@ -65,12 +65,12 @@ namespace Move
             Square ourKing = Bitboard.Bsf(pos.BitboardOf(usColor, PieceType.King));
             Square theirKing = Bitboard.Bsf(pos.BitboardOf(themColor, PieceType.King));
 
-            if (ourKing == 0)
+            if (ourKing == Square.NoSquare)
             {
                 return 0;
             }
 
-            if (theirKing == 0)
+            if (theirKing == Square.NoSquare)
             {
                 return 0;
             }
