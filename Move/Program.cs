@@ -71,3 +71,10 @@ Tables.InitialiseAllDatabases();
 Zobrist.InitialiseZobristKeys();
 
 TestPerft();
+
+// release nps log
+// ~155 mnps
+// ~169 mnps
+// ~174 mnps
+
+

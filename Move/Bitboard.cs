@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Intrinsics.X86;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -101,7 +102,7 @@ namespace Move
             const ulong k4 = 0x0f0f0f0f0f0f0f0fUL;
             const ulong kf = 0x0101010101010101UL;
 
-            x = x - ((x >> 1) & k1);
+            x -= (x >> 1) & k1;
             x = (x & k2) + ((x >> 2) & k2);
             x = (x + (x >> 4)) & k4;
             x = (x * kf) >> 56;
@@ -128,6 +129,8 @@ namespace Move
 
         public static Square Bsf(ulong b)
         {
+            return (Square)Bmi1.X64.TrailingZeroCount(b);
+
             return (Square)DEBRUIJN64[MAGIC * (b ^ (b - 1)) >> 58];
         }
 

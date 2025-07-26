@@ -88,7 +88,7 @@ public static class Perft
     {
         Console.WriteLine("Running Perft Tests...\n");
 
-        foreach (var (fen, depth, expected) in TestPositions)
+        foreach ((string fen, int depth, long expected) in TestPositions)
         {
             var board = FenParser.ParseFen(fen);
             var sw = Stopwatch.StartNew();

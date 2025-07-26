@@ -18,8 +18,9 @@ public static class FenParser
         string placement = parts[0];
         int square = 56; // Start from a8
 
-        foreach (char c in placement)
+        for (int i = 0; i<placement.Length; i++)
         {
+            char c = placement[i];
             if (c == '/')
             {
                 square -= 16; // Go to next rank
@@ -55,8 +56,9 @@ public static class FenParser
 
         // Parse castling rights
         board.CastlingRights = CastlingRights.None;
-        foreach (char c in parts[2])
+        for (int i = 0; i<parts[2].Length; i++)
         {
+            char c = parts[2][i];
             switch (c)
             {
                 case 'K': board.CastlingRights |= CastlingRights.WhiteKingside; break;

@@ -73,7 +73,7 @@ namespace Chess
             ("rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3", 2, 615L),
         };
 
-            foreach (var (fen, depth, expected) in perftTests)
+            foreach ((string fen, int depth, long expected) in perftTests)
             {
                 var board = FenParser.ParseFen(fen);
                 long result = Perft.RunPerft(board, depth);
@@ -232,8 +232,9 @@ namespace Chess
             "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8"
         };
 
-            foreach (var fen in testFens)
+            for (int i = 0; i<testFens.Length; i++)
             {
+                string? fen = testFens[i];
                 try
                 {
                     var board = FenParser.ParseFen(fen);

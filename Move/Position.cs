@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Move
@@ -58,20 +59,21 @@ namespace Move
             History[0] = new UndoInfo();
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void PutPiece(Piece pc, Square s)
         {
             board[(int)s] = pc;
             pieceBB[(int)pc] |= Bitboard.SQUARE_BB[(int)s];
             hash ^= Zobrist.ZobristTable[(int)pc, (int)s];
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void RemovePiece(Square s)
         {
             hash ^= Zobrist.ZobristTable[(int)board[(int)s], (int)s];
             pieceBB[(int)board[(int)s]] &= ~Bitboard.SQUARE_BB[(int)s];
             board[(int)s] = Piece.NoPiece;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void MovePiece(Square from, Square to)
         {
             hash ^= Zobrist.ZobristTable[(int)board[(int)from], (int)from]
@@ -84,6 +86,7 @@ namespace Move
             board[(int)to] = board[(int)from];
             board[(int)from] = Piece.NoPiece;
         }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void MovePieceQuiet(Square from, Square to)
         {
             hash ^= Zobrist.ZobristTable[(int)board[(int)from], (int)from]
@@ -98,20 +101,21 @@ namespace Move
         public Color Turn => sideToPlay;
         public int Ply => gamePly;
         public ulong GetHash() => hash;
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ulong DiagonalSliders(Color c)
         {
             return c == Color.White ?
                 pieceBB[(int)Piece.WhiteBishop] | pieceBB[(int)Piece.WhiteQueen] :
                 pieceBB[(int)Piece.BlackBishop] | pieceBB[(int)Piece.BlackQueen];
         }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ulong OrthogonalSliders(Color c)
         {
             return c == Color.White ?
                 pieceBB[(int)Piece.WhiteRook] | pieceBB[(int)Piece.WhiteQueen] :
                 pieceBB[(int)Piece.BlackRook] | pieceBB[(int)Piece.BlackQueen];
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ulong AllPieces(Color c)
         {
             return c == Color.White ?
@@ -122,7 +126,7 @@ namespace Move
                 pieceBB[(int)Piece.BlackBishop] | pieceBB[(int)Piece.BlackRook] |
                 pieceBB[(int)Piece.BlackQueen] | pieceBB[(int)Piece.BlackKing];
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ulong AttackersFrom(Color c, Square s, ulong occ)
         {
             return c == Color.White ?
@@ -135,13 +139,13 @@ namespace Move
                 (Tables.Attacks(PieceType.Bishop, s, occ) & (pieceBB[(int)Piece.BlackBishop] | pieceBB[(int)Piece.BlackQueen])) |
                 (Tables.Attacks(PieceType.Rook, s, occ) & (pieceBB[(int)Piece.BlackRook] | pieceBB[(int)Piece.BlackQueen]));
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool InCheck(Color c)
         {
             var kingSquare = Bitboard.Bsf(BitboardOf(c, PieceType.King));
             return AttackersFrom(c.Flip(), kingSquare, AllPieces(Color.White) | AllPieces(Color.Black)) != 0;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Play(Color us, Move m)
         {
             sideToPlay = sideToPlay.Flip();
@@ -247,7 +251,7 @@ namespace Move
                     break;
             }
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Undo(Color us, Move m)
         {
             var type = m.Flags;
