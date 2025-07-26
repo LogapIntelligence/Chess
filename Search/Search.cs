@@ -113,68 +113,81 @@ namespace Search
             // Iterative deepening loop
             for (int depth = 1; depth <= limits.Depth && !ShouldStopSearch(); depth++)
             {
-                var aspWindow = depth >= 4 ? 25 : INFINITY; // Start with wider window
+                var initialAspWindow = depth >= 4 ? 50 : INFINITY; // Start with reasonable window
                 var alpha = -INFINITY;
                 var beta = INFINITY;
 
                 // Use aspiration window for deeper searches
                 if (depth >= 4 && Math.Abs(bestScore) < MATE_VALUE - 100)
                 {
-                    alpha = bestScore - aspWindow;
-                    beta = bestScore + aspWindow;
+                    alpha = bestScore - initialAspWindow;
+                    beta = bestScore + initialAspWindow;
                 }
 
                 // Search with aspiration window
-                int failHighCount = 0;
-                int failLowCount = 0;
+                int failCount = 0;
+                const int MAX_ASPIRATION_RETRIES = 5;
+                var aspWindow = initialAspWindow;
                 var searchStartTime = timeManager.ElapsedMs();
 
-                while (true)
+                while (failCount < MAX_ASPIRATION_RETRIES)
                 {
+                    Console.WriteLine("Here");
                     bestScore = SearchRoot(depth, alpha, beta, rootMoves);
 
                     // Check aspiration window failure
                     if (bestScore <= alpha)
                     {
-                        // Fail low - widen window down
-                        beta = (alpha + beta) / 2;
-                        alpha = Math.Max(-INFINITY, alpha - aspWindow);
-                        aspWindow *= 2; // Double the window
-                        failLowCount++;
+                        // Fail low - we need to search with lower alpha
+                        beta = alpha; // Optional: can keep previous beta
+                        alpha = Math.Max(-INFINITY, bestScore - aspWindow);
+                        aspWindow = aspWindow + aspWindow / 2; // Increase window by 50%
+                        failCount++;
 
-                        Console.WriteLine($"info string fail low at depth {depth}, widening window");
+                        Console.WriteLine($"info string fail low at depth {depth}, score {bestScore}, " +
+                                        $"new window [{alpha},{beta}], retry {failCount}");
                     }
                     else if (bestScore >= beta)
                     {
-                        // Fail high - widen window up
-                        alpha = (alpha + beta) / 2;
-                        beta = Math.Min(INFINITY, beta + aspWindow);
-                        aspWindow *= 2;
-                        failHighCount++;
+                        // Fail high - we need to search with higher beta
+                        alpha = beta; // Optional: can keep previous alpha  
+                        beta = Math.Min(INFINITY, bestScore + aspWindow);
+                        aspWindow = aspWindow + aspWindow / 2; // Increase window by 50%
+                        failCount++;
 
-                        Console.WriteLine($"info string fail high at depth {depth}, widening window");
+                        Console.WriteLine($"info string fail high at depth {depth}, score {bestScore}, " +
+                                        $"new window [{alpha},{beta}], retry {failCount}");
                     }
                     else
                     {
-                        // Search completed successfully
+                        if (depth == 11)
+                        {
+
+                        }
+                        // Search completed successfully within window
                         break;
                     }
 
-                    // If too many failures or taking too long, use full window
-                    if (failHighCount + failLowCount >= 3 ||
-                        timeManager.ElapsedMs() - searchStartTime > limits.MoveTime / 4)
-                    {
-                        alpha = -INFINITY;
-                        beta = INFINITY;
-                        Console.WriteLine($"info string using full window at depth {depth}");
-
-                        // Do one more search with full window
-                        bestScore = SearchRoot(depth, alpha, beta, rootMoves);
-                        break;
-                    }
-
+                    // Safety checks to prevent getting stuck
                     if (ShouldStopSearch())
                         break;
+
+                    // If we're taking too long or failing too much, use full window
+                    var elapsedAtThisDepth = timeManager.ElapsedMs() - searchStartTime;
+                    var timeLimit = limits.MoveTime > 0 ? limits.MoveTime / 4 : 1000; // Default 1 second
+
+                    if (failCount >= MAX_ASPIRATION_RETRIES || elapsedAtThisDepth > timeLimit)
+                    {
+                        // Last resort: search with full window
+                        if (alpha != -INFINITY || beta != INFINITY)
+                        {
+                            alpha = -INFINITY;
+                            beta = INFINITY;
+                            Console.WriteLine($"info string using full window at depth {depth} after {failCount} retries");
+                            bestScore = SearchRoot(depth, alpha, beta, rootMoves);
+                        }
+                        break;
+                    }
                 }
 
                 if (!ShouldStopSearch())
@@ -193,18 +206,32 @@ namespace Search
                     // Print search info
                     PrintSearchInfo(searchResult);
 
-                    // Early exit if mate found or if we found a forced mate
+                    // Early exit conditions
                     if (Math.Abs(bestScore) >= MATE_VALUE - 100)
                     {
                         Console.WriteLine($"info string mate found, stopping search");
                         break;
                     }
 
-                    // Stop if we're running out of time and have a decent result
-                    if (depth >= 6 && timeManager.ShouldStop())
+                    // Time management - be more careful about when to stop
+                    if (timeManager.ShouldStop())
                     {
-                        Console.WriteLine($"info string time up, stopping search");
+                        Console.WriteLine($"info string time limit reached, stopping search");
                         break;
+                    }
+
+                    // Additional safety: if we've used more than 50% of our time, 
+                    // only continue if we have time for another iteration
+                    if (depth >= 6 && timeManager.ElapsedMs() > timeManager.GetAllocatedTime() / 2)
+                    {
+                        var timePerDepth = timeManager.ElapsedMs() / depth;
+                        var estimatedNextDepthTime = timePerDepth * 2; // Exponential growth estimate
+
+                        if (timeManager.ElapsedMs() + estimatedNextDepthTime > timeManager.GetAllocatedTime())
+                        {
+                            Console.WriteLine($"info string insufficient time for next iteration, stopping search");
+                            break;
+                        }
                     }
                 }
                 else
@@ -219,6 +246,11 @@ namespace Search
 
         private int SearchRoot(int depth, int alpha, int beta, List<RootMove> rootMoves)
         {
+            if (depth > 11)
+            {
+
+            }
+            Console.WriteLine("Search Root");
             var bestScore = -INFINITY;
             pvLength[0] = 0;
 
@@ -233,7 +265,8 @@ namespace Search
                 NodesSearched++;
 
                 // Make move
-                rootPosition.Play(rootPosition.Turn, rootMove.Move);
+                var colorToMove = rootPosition.Turn;  // Save color BEFORE Play()
+                rootPosition.Play(colorToMove, rootMove.Move);
 
                 int score;
                 if (moveIndex == 0)
@@ -263,7 +296,7 @@ namespace Search
                 }
 
                 // Unmake move
-                rootPosition.Undo(rootPosition.Turn.Flip(), rootMove.Move);
+                rootPosition.Undo(colorToMove, rootMove.Move);
 
                 rootMove.Score = score;
                 rootMove.PreviousScore = rootMove.Score;
@@ -302,6 +335,12 @@ namespace Search
 
         private int AlphaBeta(int depth, int alpha, int beta, int ply, bool pvNode)
         {
+            if (depth > 11)
+            {
+
+            }
+            Console.WriteLine($"alpha-beta: ply={ply} depth={depth} α={alpha} β={beta} hash={rootPosition.GetHash()}");
+
             // Check time and stop conditions
             if ((NodesSearched & 2047) == 0 && ShouldStopSearch())
                 return 0;
@@ -474,7 +513,9 @@ namespace Search
                 }
 
                 // Make move
-                rootPosition.Play(rootPosition.Turn, move);
+                var colorToMove = rootPosition.Turn;
+                rootPosition.Play(colorToMove, move);
+
 
                 // Check if move is legal (gives check)
                 bool givesCheck = rootPosition.InCheck(rootPosition.Turn);
@@ -515,7 +556,7 @@ namespace Search
                 }
 
                 // Unmake move
-                rootPosition.Undo(rootPosition.Turn.Flip(), move);
+                rootPosition.Undo(colorToMove, move);
 
                 if (!move.IsCapture && move.Flags != MoveFlags.PrQueen && move.Flags != MoveFlags.PcQueen)
                     quietMovesSeen++;
@@ -613,9 +654,11 @@ namespace Search
                         continue;
                 }
 
-                rootPosition.Play(rootPosition.Turn, move);
+                // FIX: Save the color before making the move
+                var colorToMove = rootPosition.Turn;
+                rootPosition.Play(colorToMove, move);
                 var score = -Quiescence(-beta, -alpha, ply + 1);
-                rootPosition.Undo(rootPosition.Turn.Flip(), move);
+                rootPosition.Undo(colorToMove, move);  // Use the saved color
 
                 if (score > alpha)
                 {
@@ -627,7 +670,6 @@ namespace Search
 
             return alpha;
         }
-
         // Helper methods
         private int LogarithmicReduction(int depth, int moveNumber)
         {
@@ -731,6 +773,11 @@ namespace Search
             var buffer = new Move.Move[MAX_MOVES];
             var count = GenerateMovesInto(buffer);
             var rootMoves = new List<RootMove>(count);
+
+            if (count == 0)
+            {
+                throw new Exception("Here");
+            }
 
             for (int i = 0; i < count; i++)
                 rootMoves.Add(new RootMove { Move = buffer[i] });

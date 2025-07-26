@@ -328,9 +328,10 @@ namespace Search
 
             foreach (var move in moves)
             {
-                pos.Play(pos.Turn, move);
+                var colorToMove = pos.Turn;
+                pos.Play(colorToMove, move);
                 nodes += Perft(pos, depth - 1);
-                pos.Undo(pos.Turn.Flip(), move);
+                pos.Undo(colorToMove, move);
             }
 
             return nodes;
