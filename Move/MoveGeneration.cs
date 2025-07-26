@@ -65,6 +65,16 @@ namespace Move
             Square ourKing = Bitboard.Bsf(pos.BitboardOf(usColor, PieceType.King));
             Square theirKing = Bitboard.Bsf(pos.BitboardOf(themColor, PieceType.King));
 
+            if (ourKing == 0)
+            {
+                return 0;
+            }
+
+            if (theirKing == 0)
+            {
+                return 0;
+            }
+
             ulong ourDiagSliders = pos.DiagonalSliders(usColor);
             ulong theirDiagSliders = pos.DiagonalSliders(themColor);
             ulong ourOrthSliders = pos.OrthogonalSliders(usColor);
@@ -219,6 +229,9 @@ namespace Move
         {
             ulong b1, b2;
             Square s;
+
+            if (pos.History[pos.Ply].Epsq == Square.NoSquare)
+                return;
 
             b2 = Tables.PawnAttacks(usColor.Flip(), pos.History[pos.Ply].Epsq) & pos.BitboardOf(usColor, PieceType.Pawn);
             b1 = b2 & notPinned;

@@ -322,6 +322,9 @@ namespace Move
 
         public static ulong Attacks(PieceType pt, Square s, ulong occ)
         {
+            if (s == Square.NoSquare)
+                return 0UL;
+
             return pt switch
             {
                 PieceType.Pawn => throw new ArgumentException("The piece type may not be a pawn; use PawnAttacks instead"),
