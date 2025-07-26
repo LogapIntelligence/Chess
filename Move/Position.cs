@@ -86,6 +86,26 @@ namespace Move
             board[(int)to] = board[(int)from];
             board[(int)from] = Piece.NoPiece;
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void MovePieceQuietNoHash(Square from, Square to)
+        {
+            pieceBB[(int)board[(int)from]] ^= (Bitboard.SQUARE_BB[(int)from] | Bitboard.SQUARE_BB[(int)to]);
+            board[(int)to] = board[(int)from];
+            board[(int)from] = Piece.NoPiece;
+        }
+        public Position(Position other)
+        {
+            Array.Copy(other.pieceBB, pieceBB, Types.NPIECES);
+            Array.Copy(other.board, board, Types.NSQUARES);
+            sideToPlay = other.sideToPlay;
+            gamePly = other.gamePly;
+            hash = other.hash;
+            Array.Copy(other.History, History, gamePly + 1);
+            Checkers = other.Checkers;
+            Pinned = other.Pinned;
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void MovePieceQuiet(Square from, Square to)
         {
