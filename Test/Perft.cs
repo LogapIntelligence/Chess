@@ -32,9 +32,9 @@ public static class Perft
 
         foreach (var (depth, expected) in expectedValues)
         {
-            if (depth > 6) break;
+            if (depth > 7) break;
 
-            if (depth == 6)
+            if (depth == 7)
             {
                 sw.Start();
                 nodes = PerftOptimized.Run(p, depth);

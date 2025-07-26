@@ -1,15 +1,16 @@
 ﻿using System;
+using System.Buffers;
 using System.Threading;
 using System.Threading.Tasks;
 using Move;
 
 namespace Search
 {
-    unsafe
-    public class Search
+    public unsafe class Search
     {
         // Constants
         public const int MAX_PLY = 128;
+        public const int MAX_MOVES = 256;
         public const int INFINITY = 30000;
         public const int MATE_VALUE = 29000;
         public const int DRAW_VALUE = 0;
@@ -19,7 +20,10 @@ namespace Search
         private readonly SearchInfo searchInfo;
         private readonly TranspositionTable tt;
         private readonly MoveOrdering moveOrdering;
-        private readonly ThreadPool threadPool;
+
+        // Move generation buffers - pre-allocated per thread
+        private readonly Move.Move[][] moveBuffers;
+        private readonly ArrayPool<Move.Move> movePool;
 
         // Statistics
         public ulong NodesSearched { get; private set; }
@@ -42,7 +46,6 @@ namespace Search
             searchInfo = new SearchInfo();
             tt = new TranspositionTable(ttSizeMB);
             moveOrdering = new MoveOrdering();
-            threadPool = new ThreadPool(threadCount);
             timeManager = new TimeManager();
 
             pvTable = new Move.Move[MAX_PLY, MAX_PLY];
@@ -50,6 +53,14 @@ namespace Search
             killerMoves = new Move.Move[MAX_PLY, 2];
             historyTable = new int[64, 64];
 
+            // Pre-allocate move buffers for each ply
+            moveBuffers = new Move.Move[MAX_PLY][];
+            for (int i = 0; i < MAX_PLY; i++)
+            {
+                moveBuffers[i] = new Move.Move[MAX_MOVES];
+            }
+
+            movePool = ArrayPool<Move.Move>.Create(MAX_MOVES, MAX_PLY);
             rootPosition = new Position();
         }
 
@@ -274,12 +285,15 @@ namespace Search
                     return beta;
             }
 
-            // Generate and order moves
-            var moves = GenerateMoves();
-            var moveCount = OrderMoves(moves, ttMove, ply);
+            // Generate moves using pre-allocated buffer
+            var moves = moveBuffers[ply];
+            var moveCount = GenerateMovesInto(moves);
 
             if (moveCount == 0)
                 return inCheck ? -MATE_VALUE + ply : DRAW_VALUE;
+
+            // Order moves
+            moveCount = OrderMovesInPlace(moves, moveCount, ttMove, ply);
 
             var bestScore = -INFINITY;
             var bestMove = new Move.Move();
@@ -382,12 +396,15 @@ namespace Search
                     alpha = standPat;
             }
 
-            // Generate captures only (or all moves if in check)
-            var moves = GenerateCaptures(inCheck);
-            var moveCount = OrderCaptures(moves, ply);
+            // Generate captures using pre-allocated buffer
+            var moves = moveBuffers[ply];
+            var moveCount = GenerateCapturesInto(moves, inCheck);
 
             if (inCheck && moveCount == 0)
                 return -MATE_VALUE + ply;
+
+            // Order captures
+            moveCount = OrderCapturesInPlace(moves, moveCount, ply);
 
             for (int i = 0; i < moveCount; i++)
             {
@@ -412,52 +429,60 @@ namespace Search
             return alpha;
         }
 
-        // Move generation helpers
-        private unsafe Move.Move[] GenerateMoves()
+        // Move generation helpers - now using pre-allocated arrays
+        private int GenerateMovesInto(Move.Move[] moveBuffer)
         {
-            var moves = new Move.Move[256];
-            int count;
-
-            fixed (Move.Move* movesPtr = moves)
+            fixed (Move.Move* movesPtr = moveBuffer)
             {
                 if (rootPosition.Turn == Color.White)
-                    count = rootPosition.GenerateLegalsInto<White>(movesPtr);
+                    return rootPosition.GenerateLegalsInto<White>(movesPtr);
                 else
-                    count = rootPosition.GenerateLegalsInto<Black>(movesPtr);
+                    return rootPosition.GenerateLegalsInto<Black>(movesPtr);
             }
-
-            Array.Resize(ref moves, count);
-            return moves;
         }
 
-        private unsafe Move.Move[] GenerateCaptures(bool inCheck)
+        private int GenerateCapturesInto(Move.Move[] moveBuffer, bool inCheck)
         {
             if (inCheck)
-                return GenerateMoves();
+                return GenerateMovesInto(moveBuffer);
 
-            var allMoves = GenerateMoves();
-            return Array.FindAll(allMoves, m => m.IsCapture);
+            var count = GenerateMovesInto(moveBuffer);
+
+            // Filter captures in-place
+            int captureCount = 0;
+            for (int i = 0; i < count; i++)
+            {
+                if (moveBuffer[i].IsCapture)
+                {
+                    if (captureCount != i)
+                        moveBuffer[captureCount] = moveBuffer[i];
+                    captureCount++;
+                }
+            }
+
+            return captureCount;
         }
 
         private List<RootMove> GenerateRootMoves()
         {
-            var moves = GenerateMoves();
-            var rootMoves = new List<RootMove>();
+            var buffer = new Move.Move[MAX_MOVES];
+            var count = GenerateMovesInto(buffer);
+            var rootMoves = new List<RootMove>(count);
 
-            foreach (var move in moves)
-                rootMoves.Add(new RootMove { Move = move });
+            for (int i = 0; i < count; i++)
+                rootMoves.Add(new RootMove { Move = buffer[i] });
 
             return rootMoves;
         }
 
-        // Move ordering
-        private int OrderMoves(Move.Move[] moves, Move.Move ttMove, int ply)
+        // Move ordering - in-place
+        private int OrderMovesInPlace(Move.Move[] moves, int moveCount, Move.Move ttMove, int ply)
         {
             return moveOrdering.OrderMoves(moves, ttMove, killerMoves[ply, 0],
                                          killerMoves[ply, 1], historyTable, rootPosition);
         }
 
-        private int OrderCaptures(Move.Move[] moves, int ply)
+        private int OrderCapturesInPlace(Move.Move[] moves, int moveCount, int ply)
         {
             return moveOrdering.OrderCaptures(moves, rootPosition);
         }
@@ -573,7 +598,7 @@ namespace Search
         }
     }
 
-    // Helper classes
+    // Helper classes remain the same...
     public class RootMove
     {
         public Move.Move Move { get; set; }
