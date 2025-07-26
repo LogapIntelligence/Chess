@@ -26,7 +26,7 @@ namespace Search
             if (limits.MoveTime > 0)
             {
                 // Fixed time per move
-                allocatedTime = limits.MoveTime;
+                allocatedTime = limits.MoveTime - 50; // 50ms safety margin
                 maxTime = limits.MoveTime;
             }
             else if (limits.Time > 0)
@@ -34,42 +34,47 @@ namespace Search
                 // Time control with increment
                 var timeLeft = limits.Time;
                 var increment = limits.Inc;
-                var movesToGo = limits.MovesToGo > 0 ? limits.MovesToGo : 30;
+                var movesToGo = limits.MovesToGo > 0 ? limits.MovesToGo : 25; // More conservative
 
-                // Basic time allocation
+                // Basic time allocation - be more conservative
                 allocatedTime = CalculateAllocatedTime(timeLeft, increment, movesToGo);
-                maxTime = Math.Min(timeLeft / 2, allocatedTime * 4);
+                maxTime = Math.Min(timeLeft / 3, allocatedTime * 3); // More conservative max time
+            }
+            else if (limits.Depth < 128) // Depth-only search
+            {
+                // For depth-limited search, give reasonable time limits
+                allocatedTime = 30000; // 30 seconds max
+                maxTime = 60000; // 1 minute absolute max
             }
             else
             {
-                // No time limit
-                allocatedTime = long.MaxValue;
-                maxTime = long.MaxValue;
+                // No time limit - but set reasonable defaults to prevent infinite search
+                allocatedTime = 10000; // 10 seconds default
+                maxTime = 30000; // 30 seconds max
             }
         }
 
         private long CalculateAllocatedTime(long timeLeft, long increment, int movesToGo)
         {
-            // Simple time allocation formula
-            // Allocate more time in the opening and middle game
+            // More conservative time allocation
             long baseTime;
 
             if (movesToGo == 1)
             {
                 // Last move before time control
-                baseTime = timeLeft - 50; // Keep 50ms safety margin
+                baseTime = Math.Max(100, timeLeft - 100); // Keep 100ms safety margin
             }
             else
             {
-                // Normal time allocation
-                baseTime = timeLeft / movesToGo + increment * 3 / 4;
+                // Normal time allocation - use less time per move
+                baseTime = timeLeft / (movesToGo + 5) + increment / 2;
 
-                // Don't use more than 1/5 of remaining time
-                baseTime = Math.Min(baseTime, timeLeft / 5);
+                // Don't use more than 1/8 of remaining time
+                baseTime = Math.Min(baseTime, timeLeft / 8);
             }
 
-            // Safety margin
-            return Math.Max(1, baseTime - 50);
+            // Always keep some safety margin
+            return Math.Max(50, baseTime - 100);
         }
 
         public bool ShouldStop()

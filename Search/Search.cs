@@ -113,11 +113,11 @@ namespace Search
             // Iterative deepening loop
             for (int depth = 1; depth <= limits.Depth && !ShouldStopSearch(); depth++)
             {
-                var aspWindow = 15; // Tighter aspiration window
+                var aspWindow = depth >= 4 ? 25 : INFINITY; // Start with wider window
                 var alpha = -INFINITY;
                 var beta = INFINITY;
 
-                // Aspiration window
+                // Use aspiration window for deeper searches
                 if (depth >= 4 && Math.Abs(bestScore) < MATE_VALUE - 100)
                 {
                     alpha = bestScore - aspWindow;
@@ -127,6 +127,8 @@ namespace Search
                 // Search with aspiration window
                 int failHighCount = 0;
                 int failLowCount = 0;
+                var searchStartTime = timeManager.ElapsedMs();
+
                 while (true)
                 {
                     bestScore = SearchRoot(depth, alpha, beta, rootMoves);
@@ -134,32 +136,40 @@ namespace Search
                     // Check aspiration window failure
                     if (bestScore <= alpha)
                     {
+                        // Fail low - widen window down
                         beta = (alpha + beta) / 2;
                         alpha = Math.Max(-INFINITY, alpha - aspWindow);
-                        aspWindow = aspWindow + aspWindow / 2; // Gradual increase
+                        aspWindow *= 2; // Double the window
                         failLowCount++;
+
+                        Console.WriteLine($"info string fail low at depth {depth}, widening window");
                     }
                     else if (bestScore >= beta)
                     {
+                        // Fail high - widen window up
                         alpha = (alpha + beta) / 2;
                         beta = Math.Min(INFINITY, beta + aspWindow);
-                        aspWindow = aspWindow + aspWindow / 2;
+                        aspWindow *= 2;
                         failHighCount++;
 
-                        // Time extension on fail high
-                        if (failHighCount == 1)
-                            timeManager.ExtendTime(2);
+                        Console.WriteLine($"info string fail high at depth {depth}, widening window");
                     }
                     else
                     {
+                        // Search completed successfully
                         break;
                     }
 
-                    // Widen window if too many failures
-                    if (failHighCount + failLowCount >= 3)
+                    // If too many failures or taking too long, use full window
+                    if (failHighCount + failLowCount >= 3 ||
+                        timeManager.ElapsedMs() - searchStartTime > limits.MoveTime / 4)
                     {
                         alpha = -INFINITY;
                         beta = INFINITY;
+                        Console.WriteLine($"info string using full window at depth {depth}");
+
+                        // Do one more search with full window
+                        bestScore = SearchRoot(depth, alpha, beta, rootMoves);
                         break;
                     }
 
@@ -182,11 +192,26 @@ namespace Search
 
                     // Print search info
                     PrintSearchInfo(searchResult);
-                }
 
-                // Early exit if mate found
-                if (Math.Abs(bestScore) >= MATE_VALUE - 100)
+                    // Early exit if mate found or if we found a forced mate
+                    if (Math.Abs(bestScore) >= MATE_VALUE - 100)
+                    {
+                        Console.WriteLine($"info string mate found, stopping search");
+                        break;
+                    }
+
+                    // Stop if we're running out of time and have a decent result
+                    if (depth >= 6 && timeManager.ShouldStop())
+                    {
+                        Console.WriteLine($"info string time up, stopping search");
+                        break;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"info string search stopped at depth {depth}");
                     break;
+                }
             }
 
             return searchResult;

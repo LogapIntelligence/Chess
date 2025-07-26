@@ -128,6 +128,7 @@ namespace Search
         private async Task HandleGo(string[] parts)
         {
             var limits = new SearchLimits();
+            bool hasTimeControl = false;
 
             for (int i = 1; i < parts.Length; i++)
             {
@@ -135,24 +136,36 @@ namespace Search
                 {
                     case "depth":
                         if (i + 1 < parts.Length && int.TryParse(parts[i + 1], out int depth))
+                        {
                             limits.Depth = depth;
+                            hasTimeControl = true;
+                        }
                         break;
 
                     case "movetime":
                         if (i + 1 < parts.Length && long.TryParse(parts[i + 1], out long moveTime))
+                        {
                             limits.MoveTime = moveTime;
+                            hasTimeControl = true;
+                        }
                         break;
 
                     case "wtime":
                         if (i + 1 < parts.Length && long.TryParse(parts[i + 1], out long wtime) &&
                             position.Turn == Color.White)
+                        {
                             limits.Time = wtime;
+                            hasTimeControl = true;
+                        }
                         break;
 
                     case "btime":
                         if (i + 1 < parts.Length && long.TryParse(parts[i + 1], out long btime) &&
                             position.Turn == Color.Black)
+                        {
                             limits.Time = btime;
+                            hasTimeControl = true;
+                        }
                         break;
 
                     case "winc":
@@ -174,8 +187,16 @@ namespace Search
 
                     case "infinite":
                         limits.Infinite = true;
+                        hasTimeControl = true;
                         break;
                 }
+            }
+
+            // If no time control specified, set reasonable defaults
+            if (!hasTimeControl)
+            {
+                limits.Depth = 12;  // Reasonable depth limit
+                limits.MoveTime = 5000;  // 5 seconds per move
             }
 
             // Stop any ongoing search
@@ -191,6 +212,7 @@ namespace Search
 
             await searchTask;
         }
+
 
         private void HandleStop()
         {
