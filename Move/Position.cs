@@ -186,9 +186,18 @@ namespace Move
             ++gamePly;
             History[gamePly] = new UndoInfo(History[gamePly - 1]);
             History[gamePly].Hash = hash;
-
             var type = m.Flags;
             History[gamePly].Entry = History[gamePly - 1].Entry;
+
+            // Reset halfmove clock on pawn move or capture
+            if (Types.TypeOf(board[(int)m.From]) == PieceType.Pawn || m.IsCapture)
+            {
+                History[gamePly].HalfMoveClock = 0;
+            }
+            else
+            {
+                History[gamePly].HalfMoveClock++;
+            }
 
             // Reset halfmove clock on pawn move or capture
             if (board[(int)m.From] == Types.MakePiece(us, PieceType.King))
@@ -208,9 +217,9 @@ namespace Move
                 else if (m.From == Square.h8 && us == Color.Black) History[gamePly].Entry |= Bitboard.BLACK_OO_MASK;
             }
 
-            if (m.IsCapture && History[gamePly].Captured != Piece.NoPiece)
+            if (m.IsCapture && board[(int)m.To] != Piece.NoPiece)
             {
-                var capturedType = Types.TypeOf(History[gamePly].Captured);
+                var capturedType = Types.TypeOf(board[(int)m.To]);
                 if (capturedType == PieceType.Rook)
                 {
                     if (m.To == Square.a1) History[gamePly].Entry |= Bitboard.WHITE_OOO_MASK;
@@ -219,6 +228,7 @@ namespace Move
                     else if (m.To == Square.h8) History[gamePly].Entry |= Bitboard.BLACK_OO_MASK;
                 }
             }
+
             switch (type)
             {
                 case MoveFlags.Quiet:
