@@ -14,7 +14,7 @@ namespace Search
 
         public UCI()
         {
-            search = new Search(128, Environment.ProcessorCount);
+            search = new Search(128);
             position = new Position();
             Position.Set(Types.DEFAULT_FEN, position);
 
@@ -89,7 +89,6 @@ namespace Search
         {
             position = new Position();
             Position.Set(Types.DEFAULT_FEN, position);
-            search.StopSearch();
         }
 
         private void HandlePosition(string[] parts)
@@ -195,7 +194,6 @@ namespace Search
 
         private void HandleStop()
         {
-            search.StopSearch();
             searchCancellation?.Cancel();
             searchTask?.Wait();
         }

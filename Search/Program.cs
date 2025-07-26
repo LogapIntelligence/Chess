@@ -38,7 +38,7 @@ class Program
         Position.Set(Types.DEFAULT_FEN, position);
 
         // Create search engine
-        var searchEngine = new Search.Search(128, 1); // 128MB hash, 4 threads
+        var searchEngine = new Search.Search(128); // 128MB hash, 4 threads
 
         // Set up search limits
         var limits = new SearchLimits

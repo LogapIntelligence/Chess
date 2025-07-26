@@ -10,7 +10,6 @@ namespace Move
         {
             s = seed;
         }
-
         private ulong Rand64()
         {
             s ^= s >> 12;
@@ -37,10 +36,13 @@ namespace Move
     public static class Zobrist
     {
         public static readonly ulong[,] ZobristTable = new ulong[Types.NPIECES, Types.NSQUARES];
-
+        public static ulong SideToMove;
         public static void Init()
         {
             PRNG rng = new(70026072);
+
+            SideToMove = rng.Rand<ulong>();
+
             for (int i = 0; i < Types.NPIECES; i++)
             {
                 for (int j = 0; j < Types.NSQUARES; j++)

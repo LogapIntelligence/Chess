@@ -7,16 +7,18 @@ namespace Move
     public struct UndoInfo
     {
         public ulong Entry;
-
         public Piece Captured;
-
         public Square Epsq;
+        public ulong Hash;        // Add: Store position hash
+        public int HalfMoveClock; // Add: For 50-move rule
 
         public UndoInfo()
         {
             Entry = 0;
             Captured = Piece.NoPiece;
             Epsq = Square.NoSquare;
+            Hash = 0;
+            HalfMoveClock = 0;
         }
 
         public UndoInfo(UndoInfo prev)
@@ -24,6 +26,8 @@ namespace Move
             Entry = prev.Entry;
             Captured = Piece.NoPiece;
             Epsq = Square.NoSquare;
+            Hash = 0;
+            HalfMoveClock = prev.HalfMoveClock;
         }
     }
 
@@ -82,6 +86,26 @@ namespace Move
             pieceBB[(int)board[(int)to]] &= ~mask;
             board[(int)to] = board[(int)from];
             board[(int)from] = Piece.NoPiece;
+        }
+
+        public void MakeNullMove()
+        {
+            sideToPlay = sideToPlay.Flip();
+            ++gamePly;
+            History[gamePly] = new UndoInfo(History[gamePly - 1]);
+            History[gamePly].Epsq = Square.NoSquare;
+            History[gamePly].Hash = hash;
+            History[gamePly].HalfMoveClock++;
+
+            // Update hash for side to move
+            hash ^= Zobrist.SideToMove; // Need to add this to Zobrist
+        }
+
+        public void UnmakeNullMove()
+        {
+            sideToPlay = sideToPlay.Flip();
+            --gamePly;
+            hash = History[gamePly].Hash;
         }
 
         private void MovePieceQuietNoHash(Square from, Square to)
@@ -160,9 +184,22 @@ namespace Move
             sideToPlay = sideToPlay.Flip();
             ++gamePly;
             History[gamePly] = new UndoInfo(History[gamePly - 1]);
+            History[gamePly].Hash = hash;
 
             var type = m.Flags;
             History[gamePly].Entry |= Bitboard.SQUARE_BB[(int)m.To] | Bitboard.SQUARE_BB[(int)m.From];
+
+            // Reset halfmove clock on pawn move or capture
+            if (board[(int)m.From] == Types.MakePiece(us, PieceType.Pawn) ||
+                board[(int)m.To] != Piece.NoPiece ||
+                type == MoveFlags.EnPassant)
+            {
+                History[gamePly].HalfMoveClock = 0;
+            }
+            else
+            {
+                History[gamePly].HalfMoveClock++;
+            }
 
             switch (type)
             {
@@ -330,6 +367,32 @@ namespace Move
 
             sideToPlay = sideToPlay.Flip();
             --gamePly;
+        }
+
+        public bool IsRepetition()
+        {
+            if (gamePly < 4) return false;
+
+            int count = 0;
+            for (int i = gamePly - 2; i >= 0; i -= 2)
+            {
+                if (History[i].Hash == hash)
+                {
+                    count++;
+                    if (count >= 2) return true;
+                }
+
+                // Can't go beyond last irreversible move
+                if (History[i].HalfMoveClock == 0)
+                    break;
+            }
+
+            return false;
+        }
+
+        public bool IsFiftyMoveRule()
+        {
+            return History[gamePly].HalfMoveClock >= 100;
         }
 
         public override string ToString()
