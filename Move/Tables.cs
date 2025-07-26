@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -308,7 +309,7 @@ namespace Move
                     PSEUDO_LEGAL_ATTACKS[(int)PieceType.Bishop][(int)s];
             }
         }
-        public static void InitialiseAllDatabases()
+        public static void Init()
         {
             InitialiseRookAttacks();
             InitialiseBishopAttacks();

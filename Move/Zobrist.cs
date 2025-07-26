@@ -38,7 +38,7 @@ namespace Move
     {
         public static readonly ulong[,] ZobristTable = new ulong[Types.NPIECES, Types.NSQUARES];
 
-        public static void InitialiseZobristKeys()
+        public static void Init()
         {
             PRNG rng = new(70026072);
             for (int i = 0; i < Types.NPIECES; i++)

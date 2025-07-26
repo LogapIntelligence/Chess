@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics.X86;
 using System.Text;
 using System.Threading.Tasks;
@@ -131,6 +132,7 @@ namespace Move
         {
             return (Square)Bmi1.X64.TrailingZeroCount(b);
 
+            // alternate use bebruij
             return (Square)DEBRUIJN64[MAGIC * (b ^ (b - 1)) >> 58];
         }
 

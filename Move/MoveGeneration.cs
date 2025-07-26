@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace Move
 {
@@ -129,7 +130,7 @@ namespace Move
                             {
                                 var epTarget = Bitboard.SQUARE_BB[(int)pos.History[pos.Ply].Epsq];
                                 var southDir = Types.RelativeDir(usColor, Direction.South);
-                                if (pos.Checkers == Bitboard.Shift((Direction)southDir, epTarget))
+                                if (pos.Checkers == Bitboard.Shift(southDir, epTarget))
                                 {
                                     b1 = Tables.PawnAttacks(themColor, pos.History[pos.Ply].Epsq)
                                        & pos.BitboardOf(usColor, PieceType.Pawn) & notPinned;
@@ -183,7 +184,6 @@ namespace Move
                 moveList[idx++] = new Move(from, sq, MoveFlags.Quiet);
             }
         }
-
         private static unsafe void MakeCaptureInto(Square from, ulong to, Move* moveList, ref int idx)
         {
             while (to != 0)

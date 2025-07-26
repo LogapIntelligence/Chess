@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -174,7 +175,6 @@ namespace Move
         public static Piece MakePiece(Color c, PieceType pt) => (Piece)((int)c << 3 | (int)pt);
         public static PieceType TypeOf(Piece pc) => (PieceType)((int)pc & 0b111);
         public static Color ColorOf(Piece pc) => (Color)(((int)pc & 0b1000) >> 3);
-
         public static Rank RankOf(Square s) => (Rank)((int)s >> 3);
         public static File FileOf(Square s) => (File)((int)s & 0b111);
         public static int DiagonalOf(Square s) => 7 + (int)RankOf(s) - (int)FileOf(s);

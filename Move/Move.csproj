@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	<TieredPGO>true</TieredPGO>
+	<EnableDynamicPGO>true</EnableDynamicPGO>
   </PropertyGroup>
 
 </Project>
