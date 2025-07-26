@@ -8,9 +8,6 @@ namespace Move
 {
     public static class Tables
     {
-        // All piece tables are generated from a program written in Java
-
-        // A lookup table for king move bitboards
         public static readonly ulong[] KING_ATTACKS = new ulong[]
         {
             0x302UL, 0x705UL, 0xe0aUL, 0x1c14UL,
@@ -31,7 +28,6 @@ namespace Move
             0x2838000000000000UL, 0x5070000000000000UL, 0xa0e0000000000000UL, 0x40c0000000000000UL,
         };
 
-        // A lookup table for knight move bitboards
         public static readonly ulong[] KNIGHT_ATTACKS = new ulong[]
         {
             0x20400UL, 0x50800UL, 0xa1100UL, 0x142200UL,
@@ -52,7 +48,6 @@ namespace Move
             0x44280000000000UL, 0x0088500000000000UL, 0x0010a00000000000UL, 0x20400000000000UL
         };
 
-        // A lookup table for white pawn move bitboards
         public static readonly ulong[] WHITE_PAWN_ATTACKS = new ulong[]
         {
             0x200UL, 0x500UL, 0xa00UL, 0x1400UL,
@@ -73,7 +68,6 @@ namespace Move
             0x0UL, 0x0UL, 0x0UL, 0x0UL,
         };
 
-        // A lookup table for black pawn move bitboards
         public static readonly ulong[] BLACK_PAWN_ATTACKS = new ulong[]
         {
             0x0UL, 0x0UL, 0x0UL, 0x0UL,
@@ -94,7 +88,6 @@ namespace Move
             0x28000000000000UL, 0x50000000000000UL, 0xa0000000000000UL, 0x40000000000000UL,
         };
 
-        // Reverses a bitboard
         public static ulong Reverse(ulong b)
         {
             b = (b & 0x5555555555555555UL) << 1 | (b >> 1) & 0x5555555555555555UL;
@@ -106,16 +99,12 @@ namespace Move
                 ((b >> 16) & 0xffff0000UL) | (b >> 48);
         }
 
-        // Calculates sliding attacks from a given square, on a given axis, taking into
-        // account the blocking pieces. This uses the Hyperbola Quintessence Algorithm.
         public static ulong SlidingAttacks(Square square, ulong occ, ulong mask)
         {
             return (((mask & occ) - Bitboard.SQUARE_BB[(int)square] * 2) ^
                 Reverse(Reverse(mask & occ) - Reverse(Bitboard.SQUARE_BB[(int)square]) * 2)) & mask;
         }
 
-        // Returns rook attacks from a given square, using the Hyperbola Quintessence Algorithm. Only used to initialize
-        // the magic lookup table
         public static ulong GetRookAttacksForInit(Square square, ulong occ)
         {
             return SlidingAttacks(square, occ, Bitboard.MASK_FILE[(int)Types.FileOf(square)]) |
@@ -146,7 +135,6 @@ namespace Move
             0x0001000204080011UL, 0x0001000204000801UL, 0x0001000082000401UL, 0x0001FFFAABFAD1A2UL
         };
 
-        // Initializes the magic lookup table for rooks
         public static void InitialiseRookAttacks()
         {
             ulong edges, subset, index;
@@ -172,15 +160,12 @@ namespace Move
             }
         }
 
-        // Returns the attacks bitboard for a rook at a given square, using the magic lookup table
         public static ulong GetRookAttacks(Square square, ulong occ)
         {
             return ROOK_ATTACKS[(int)square][((occ & ROOK_ATTACK_MASKS[(int)square]) * ROOK_MAGICS[(int)square])
                 >> ROOK_ATTACK_SHIFTS[(int)square]];
         }
 
-        // Returns the 'x-ray attacks' for a rook at a given square. X-ray attacks cover squares that are not immediately
-        // accessible by the rook, but become available when the immediate blockers are removed from the board
         public static ulong GetXrayRookAttacks(Square square, ulong occ, ulong blockers)
         {
             ulong attacks = GetRookAttacks(square, occ);
@@ -188,8 +173,6 @@ namespace Move
             return attacks ^ GetRookAttacks(square, occ ^ blockers);
         }
 
-        // Returns bishop attacks from a given square, using the Hyperbola Quintessence Algorithm. Only used to initialize
-        // the magic lookup table
         public static ulong GetBishopAttacksForInit(Square square, ulong occ)
         {
             return SlidingAttacks(square, occ, Bitboard.MASK_DIAGONAL[Types.DiagonalOf(square)]) |
@@ -220,7 +203,6 @@ namespace Move
             0x0000000010020200UL, 0x0000000404080200UL, 0x0000040404040400UL, 0x0002020202020200UL
         };
 
-        // Initializes the magic lookup table for bishops
         public static void InitialiseBishopAttacks()
         {
             ulong edges, subset, index;
@@ -246,15 +228,11 @@ namespace Move
             }
         }
 
-        // Returns the attacks bitboard for a bishop at a given square, using the magic lookup table
         public static ulong GetBishopAttacks(Square square, ulong occ)
         {
             return BISHOP_ATTACKS[(int)square][((occ & BISHOP_ATTACK_MASKS[(int)square]) * BISHOP_MAGICS[(int)square])
                 >> BISHOP_ATTACK_SHIFTS[(int)square]];
         }
-
-        // Returns the 'x-ray attacks' for a bishop at a given square. X-ray attacks cover squares that are not immediately
-        // accessible by the bishop, but become available when the immediate blockers are removed from the board
         public static ulong GetXrayBishopAttacks(Square square, ulong occ, ulong blockers)
         {
             ulong attacks = GetBishopAttacks(square, occ);
@@ -264,8 +242,6 @@ namespace Move
 
         public static ulong[][] SQUARES_BETWEEN_BB = new ulong[64][];
 
-        // Initializes the lookup table for the bitboard of squares in between two given squares (0 if the
-        // two squares are not aligned)
         public static void InitialiseSquaresBetween()
         {
             ulong sqs;
@@ -287,8 +263,6 @@ namespace Move
 
         public static ulong[][] LINE = new ulong[64][];
 
-        // Initializes the lookup table for the bitboard of all squares along the line of two given squares (0 if the
-        // two squares are not aligned)
         public static void InitialiseLine()
         {
             for (Square sq1 = Square.a1; sq1 <= Square.h8; sq1++)
@@ -311,17 +285,13 @@ namespace Move
         public static ulong[][] PAWN_ATTACKS = new ulong[Types.NCOLORS][];
         public static ulong[][] PSEUDO_LEGAL_ATTACKS = new ulong[Types.NPIECE_TYPES][];
 
-        // Initializes the table containing pseudolegal attacks of each piece for each square. This does not include blockers
-        // for sliding pieces
         public static void InitialisePseudoLegal()
         {
-            // Initialize pawn attacks
             PAWN_ATTACKS[(int)Color.White] = new ulong[Types.NSQUARES];
             PAWN_ATTACKS[(int)Color.Black] = new ulong[Types.NSQUARES];
             Array.Copy(WHITE_PAWN_ATTACKS, PAWN_ATTACKS[(int)Color.White], Types.NSQUARES);
             Array.Copy(BLACK_PAWN_ATTACKS, PAWN_ATTACKS[(int)Color.Black], Types.NSQUARES);
 
-            // Initialize piece attacks
             for (int i = 0; i < Types.NPIECE_TYPES; i++)
             {
                 PSEUDO_LEGAL_ATTACKS[i] = new ulong[Types.NSQUARES];
@@ -338,8 +308,6 @@ namespace Move
                     PSEUDO_LEGAL_ATTACKS[(int)PieceType.Bishop][(int)s];
             }
         }
-
-        // Initializes lookup tables for rook moves, bishop moves, in-between squares, aligned squares and pseudolegal moves
         public static void InitialiseAllDatabases()
         {
             InitialiseRookAttacks();
@@ -349,25 +317,18 @@ namespace Move
             InitialisePseudoLegal();
         }
 
-        // Returns a bitboard containing all squares that a piece on a square can move to, in the given position
         public static ulong Attacks(PieceType pt, Square s, ulong occ)
         {
-            switch (pt)
+            return pt switch
             {
-                case PieceType.Pawn:
-                    throw new ArgumentException("The piece type may not be a pawn; use PawnAttacks instead");
-                case PieceType.Rook:
-                    return GetRookAttacks(s, occ);
-                case PieceType.Bishop:
-                    return GetBishopAttacks(s, occ);
-                case PieceType.Queen:
-                    return GetRookAttacks(s, occ) | GetBishopAttacks(s, occ);
-                default:
-                    return PSEUDO_LEGAL_ATTACKS[(int)pt][(int)s];
-            }
+                PieceType.Pawn => throw new ArgumentException("The piece type may not be a pawn; use PawnAttacks instead"),
+                PieceType.Rook => GetRookAttacks(s, occ),
+                PieceType.Bishop => GetBishopAttacks(s, occ),
+                PieceType.Queen => GetRookAttacks(s, occ) | GetBishopAttacks(s, occ),
+                _ => PSEUDO_LEGAL_ATTACKS[(int)pt][(int)s],
+            };
         }
 
-        // Returns a bitboard containing pawn attacks from all pawns in the given bitboard
         public static ulong PawnAttacks(Color c, ulong p)
         {
             return c == Color.White ?
@@ -375,7 +336,6 @@ namespace Move
                 Bitboard.Shift(Direction.SouthWest, p) | Bitboard.Shift(Direction.SouthEast, p);
         }
 
-        // Returns a bitboard containing pawn attacks from the pawn on the given square
         public static ulong PawnAttacks(Color c, Square s)
         {
             return PAWN_ATTACKS[(int)c][(int)s];

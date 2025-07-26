@@ -59,7 +59,6 @@ namespace Move
             0x0UL
         };
 
-        // Castling masks
         public const ulong WHITE_OO_MASK = 0x90UL;
         public const ulong WHITE_OOO_MASK = 0x11UL;
         public const ulong WHITE_OO_BLOCKERS_AND_ATTACKERS_MASK = 0x60UL;

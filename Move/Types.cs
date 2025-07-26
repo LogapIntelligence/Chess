@@ -135,7 +135,7 @@ namespace Move
             return Types.SQSTR[(int)From] + Types.SQSTR[(int)To] + Types.MOVE_TYPESTR[(int)Flags];
         }
 
-        public override bool Equals(object obj) => obj is Move m && ToFrom == m.ToFrom;
+        public override bool Equals(object? obj) => obj is Move m && ToFrom == m.ToFrom;
         public override int GetHashCode() => ToFrom;
         public static bool operator ==(Move a, Move b) => a.ToFrom == b.ToFrom;
         public static bool operator !=(Move a, Move b) => a.ToFrom != b.ToFrom;

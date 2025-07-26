@@ -278,7 +278,7 @@ public struct Board
 
             return IsSquareAttacked(kingSquare, SideToMove == Color.White ? Color.Black : Color.White);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return false;
         }
@@ -478,7 +478,7 @@ public struct Board
             // Update aggregate bitboards
             UpdateAggregateBitboards();
         }
-        catch (Exception e)
+        catch (Exception)
         {
         }
         }

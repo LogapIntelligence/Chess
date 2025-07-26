@@ -180,7 +180,7 @@ public unsafe class TranspositionTable
         entry.Depth = (byte)Math.Min(depth, 255);
         entry.SetFlag(flag, _currentAge);
             entry.SetMove(move);
-        }catch(Exception e)
+        }catch(Exception)
         {
 
         }

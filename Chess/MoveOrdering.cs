@@ -150,7 +150,7 @@ public class MoveOrdering
                 _killers[ply, 0] = move;
             }
         }
-        catch (Exception e)
+        catch (Exception)
         {
 
         }
@@ -180,7 +180,7 @@ public class MoveOrdering
                 }
             }
         }
-        catch (Exception e)
+        catch (Exception)
         {
 
         }

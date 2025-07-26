@@ -477,7 +477,7 @@ public class Uci
                 // The search will handle sending info strings and bestmove
                 _search.Think(ref board, timeMs, depth);
             }
-            catch (OperationCanceledException e)
+            catch (OperationCanceledException)
             {
                 // Expected when search is stopped - send null move
                 SendOutput("bestmove 0000");

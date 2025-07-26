@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+﻿using Move;
+using System.ComponentModel;
 using System.Diagnostics;
 
 static ulong Perft<TColor>(Position p, uint depth) where TColor : IColor, new()
@@ -21,7 +22,6 @@ static ulong Perft<TColor>(Position p, uint depth) where TColor : IColor, new()
     return nodes;
 }
 
-// Generic perft for runtime color selection
 static ulong PerftGeneric(Position p, Color color, uint depth)
 {
     if (color == Color.White)
@@ -30,7 +30,6 @@ static ulong PerftGeneric(Position p, Color color, uint depth)
         return Perft<Black>(p, depth);
 }
 
-// A variant of perft, listing all moves and for each move, the perft of the decremented depth
 static void PerftDiv<TColor>(Position p, uint depth) where TColor : IColor, new()
 {
     ulong nodes = 0, pf;
@@ -70,7 +69,6 @@ static void TestPerft()
 
 static void Main(string[] args)
 {
-    // Make sure to initialise all databases before using the library!
     Tables.InitialiseAllDatabases();
     Zobrist.InitialiseZobristKeys();
 

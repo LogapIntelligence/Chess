@@ -581,7 +581,7 @@ public class Search
 
             return bestScore;
         }
-        catch (Exception e)
+        catch (Exception)
         {
             return 0;
         }
@@ -669,7 +669,7 @@ public class Search
             // Update the PV length for the current ply.
             _pvLength[ply] = _pvLength[ply + 1];
         }
-        catch (Exception e)
+        catch (Exception)
         {
 
         }
