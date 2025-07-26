@@ -54,7 +54,7 @@ namespace Test
                 P7 = 673156899
             },
             new(){
-                Title = "rooks",
+                Title = "rooks castle",
                 FEN = "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1",
                 P1 = 26,
                 P2 = 568,
@@ -63,6 +63,17 @@ namespace Test
                 P5 = 7594526,
                 P6 = 179862938,
                 P7 = 4408318687
+            },
+            new(){
+                Title = "rooks no castle",
+                FEN = "r3k2r/8/8/8/8/8/8/R3K2R w - - 0 1",
+                P1 = 24,
+                P2 = 482,
+                P3 = 11522,
+                P4 = 261282,
+                P5 = 6326061,
+                P6 = 149788933,
+                P7 = 3680687823
             },
             new(){
                 Title = "kings",
