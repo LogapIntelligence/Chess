@@ -288,11 +288,13 @@ namespace Move
 
         public static void InitialisePseudoLegal()
         {
+            PAWN_ATTACKS = new ulong[Types.NCOLORS][];
             PAWN_ATTACKS[(int)Color.White] = new ulong[Types.NSQUARES];
             PAWN_ATTACKS[(int)Color.Black] = new ulong[Types.NSQUARES];
             Array.Copy(WHITE_PAWN_ATTACKS, PAWN_ATTACKS[(int)Color.White], Types.NSQUARES);
             Array.Copy(BLACK_PAWN_ATTACKS, PAWN_ATTACKS[(int)Color.Black], Types.NSQUARES);
 
+            PSEUDO_LEGAL_ATTACKS = new ulong[Types.NPIECE_TYPES][];
             for (int i = 0; i < Types.NPIECE_TYPES; i++)
             {
                 PSEUDO_LEGAL_ATTACKS[i] = new ulong[Types.NSQUARES];
@@ -339,6 +341,8 @@ namespace Move
 
         public static ulong PawnAttacks(Color c, Square s)
         {
+            if (s == Square.NoSquare)
+                return 0;
             return PAWN_ATTACKS[(int)c][(int)s];
         }
     }

@@ -14,13 +14,13 @@ namespace Search
 
         public UCI()
         {
+            // Initialize tables first
+            Tables.Init();
+            Zobrist.Init();
+
             search = new Search(128);
             position = new Position();
             Position.Set(Types.DEFAULT_FEN, position);
-
-            // Initialize tables
-            Tables.Init();
-            Zobrist.Init();
         }
 
         public async Task Run()

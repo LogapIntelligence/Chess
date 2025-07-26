@@ -60,7 +60,8 @@ namespace Move
             for (int i = 0; i < 64; i++)
                 board[i] = Piece.NoPiece;
 
-            History[0] = new UndoInfo();
+            for (int i = 0; i < History.Length; i++)
+                History[i] = new UndoInfo();
         }
 
         private void PutPiece(Piece pc, Square s)
@@ -296,9 +297,14 @@ namespace Move
                     MovePiece(m.From, m.To);
                     break;
             }
+
+            hash ^= Zobrist.SideToMove;
+            History[gamePly].Hash = hash;
         }
         public void Undo(Color us, Move m)
         {
+            hash = History[gamePly].Hash;
+
             var type = m.Flags;
             switch (type)
             {
@@ -376,6 +382,8 @@ namespace Move
             int count = 0;
             for (int i = gamePly - 2; i >= 0; i -= 2)
             {
+                if (i < 0) break; // Safety check
+
                 if (History[i].Hash == hash)
                 {
                     count++;
@@ -544,6 +552,11 @@ namespace Move
                     p.History[p.gamePly].Epsq = Types.CreateSquare(f, r);
                 }
             }
+
+            if (p.sideToPlay == Color.Black)
+                p.hash ^= Zobrist.SideToMove;
+
+            p.History[p.gamePly].Hash = p.hash;
         }
     }
 }

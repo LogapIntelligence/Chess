@@ -785,18 +785,7 @@ namespace Search
         // Repetition detection
         private bool IsDrawByRepetition()
         {
-            // Need at least 4 plies for a repetition
-            if (rootPosition.Ply < 4)
-                return false;
-
-            var currentHash = rootPosition.GetHash();
-            int count = 0;
-
-            // Check for repetition - we need to store position hashes in history
-            // For now, simplified check - this would need proper implementation
-            // in the Position class to store hash history
-
-            return false; // Placeholder - needs Position class update
+            return rootPosition.IsRepetition() || rootPosition.IsFiftyMoveRule();
         }
 
         // TT score adjustment
