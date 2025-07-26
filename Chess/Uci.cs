@@ -110,6 +110,14 @@ public class Uci
                         HandleGo(tokens);
                         break;
 
+                    case "nps":
+                        // Custom command to measure raw NPS without evaluation
+                        if (tokens.Length > 1 && int.TryParse(tokens[1], out int npsDepth))
+                            MeasureNPSRecursive(ref _board, npsDepth);
+                        else
+                            MeasureNPS(5); // Default depth
+                        break;
+
                     case "stop":
                         // Stop current calculation
                         HandleStop();
@@ -757,6 +765,131 @@ public class Uci
             Board newBoard = board;  // Copy board
             newBoard.MakeMove(moves[i]);
             nodes += PerftRecursive(ref newBoard, depth - 1);
+        }
+
+        return nodes;
+    }
+
+    /// <summary>
+    /// Measures raw Nodes Per Second (NPS) performance without evaluation
+    /// This tests pure move generation and make/unmake speed
+    /// </summary>
+    private void MeasureNPS(int depth)
+    {
+        SendOutput($"info string measuring raw NPS at depth {depth}...");
+
+        // Warmup run to ensure JIT compilation and cache warming
+        long warmupNodes = MeasureNPSRecursive(ref _board, Math.Min(depth - 1, 3));
+
+        // Actual measurement
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        long nodes = MeasureNPSRecursive(ref _board, depth);
+        sw.Stop();
+
+        // Calculate statistics
+        double seconds = sw.Elapsed.TotalSeconds;
+        double nps = nodes / Math.Max(seconds, 0.001);
+        double timePerNode = sw.Elapsed.TotalNanoseconds / Math.Max(nodes, 1);
+
+        // Generate initial moves to show branching factor
+        MoveList moves = new MoveList();
+        MoveGenerator.GenerateMoves(ref _board, ref moves);
+
+        SendOutput($"info string depth: {depth}");
+        SendOutput($"info string nodes: {nodes:N0}");
+        SendOutput($"info string time: {sw.ElapsedMilliseconds} ms");
+        SendOutput($"info string nps: {nps:N0}");
+        SendOutput($"info string ns/node: {timePerNode:F1}");
+        SendOutput($"info string root moves: {moves.Count}");
+
+        // Additional performance metrics
+        if (nodes > 0)
+        {
+            double effectiveBranching = Math.Pow(nodes, 1.0 / depth);
+            SendOutput($"info string effective branching factor: {effectiveBranching:F2}");
+        }
+    }
+
+    /// <summary>
+    /// Recursive helper for NPS measurement
+    /// Only generates moves and makes/unmakes them - no evaluation
+    /// </summary>
+    private long MeasureNPSRecursive(ref Board board, int depth)
+    {
+        if (depth == 0)
+            return 1;
+
+        MoveList moves = new MoveList();
+        MoveGenerator.GenerateMoves(ref board, ref moves);
+
+        // At depth 1, just return move count (optimization)
+        if (depth == 1)
+            return moves.Count;
+
+        long nodes = 0;
+
+        // Make and unmake each move
+        for (int i = 0; i < moves.Count; i++)
+        {
+            Board newBoard = board;  // Struct copy
+            newBoard.MakeMove(moves[i]);
+
+            // Skip illegal moves (leaves king in check)
+            int kingSquare = newBoard.SideToMove == Color.White ?
+                BitboardConstants.BitScanForward(board.WhiteKing) :
+                BitboardConstants.BitScanForward(board.BlackKing);
+
+            if (!newBoard.IsSquareAttacked(kingSquare, newBoard.SideToMove))
+            {
+                nodes += MeasureNPSRecursive(ref newBoard, depth - 1);
+            }
+        }
+
+        return nodes;
+    }
+
+    /// <summary>
+    /// Alternative implementation that uses legal move generation for more accurate NPS
+    /// This version is slower but gives a better real-world NPS measurement
+    /// </summary>
+    private void MeasureNPSLegal(int depth)
+    {
+        SendOutput($"info string measuring NPS with legal move generation at depth {depth}...");
+
+        // Warmup
+        MeasureNPSLegalRecursive(ref _board, Math.Min(depth - 1, 3));
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        long nodes = MeasureNPSLegalRecursive(ref _board, depth);
+        sw.Stop();
+
+        double seconds = sw.Elapsed.TotalSeconds;
+        double nps = nodes / Math.Max(seconds, 0.001);
+
+        SendOutput($"info string legal move NPS test:");
+        SendOutput($"info string depth: {depth}");
+        SendOutput($"info string nodes: {nodes:N0}");
+        SendOutput($"info string time: {sw.ElapsedMilliseconds} ms");
+        SendOutput($"info string nps: {nps:N0}");
+    }
+
+    private long MeasureNPSLegalRecursive(ref Board board, int depth)
+    {
+        if (depth == 0)
+            return 1;
+
+        MoveList moves = new MoveList();
+        MoveGenerator.GenerateLegalMoves(ref board, ref moves);
+
+        if (depth == 1)
+            return moves.Count;
+
+        long nodes = 0;
+        for (int i = 0; i < moves.Count; i++)
+        {
+            Board newBoard = board;
+            newBoard.MakeMove(moves[i]);
+            nodes += MeasureNPSLegalRecursive(ref newBoard, depth - 1);
         }
 
         return nodes;

@@ -50,7 +50,7 @@ class Program
     {
         // 1 -> Program execution starts here
         // 2 -> Create new UCI handler instance
-        var uci = new Uci();
+        //var uci = new Uci();
 
         // 3 -> Start the UCI command loop
         // 4 -> This method will:
@@ -59,8 +59,10 @@ class Program
         //      c) Execute appropriate engine functions
         //      d) Send responses to standard output
         //      e) Continue until "quit" command received
-        uci.Run();
+        //.Run();
 
         // 5 -> Program terminates after Run() returns (on "quit" command)
+
+        Performance.RunAllBenchmarks();
     }
 }

@@ -135,36 +135,54 @@ public class MoveOrdering
 
     public void UpdateKillers(Move move, int ply)
     {
-        if (ply >= 64) return;
-
-        // Don't store captures as killers
-        if (move.IsCapture) return;
-
-        if (!move.Equals(_killers[ply, 0]))
+        try
         {
-            _killers[ply, 1] = _killers[ply, 0];
-            _killers[ply, 0] = move;
+
+
+            if (ply >= 64) return;
+
+            // Don't store captures as killers
+            if (move.IsCapture) return;
+
+            if (!move.Equals(_killers[ply, 0]))
+            {
+                _killers[ply, 1] = _killers[ply, 0];
+                _killers[ply, 0] = move;
+            }
+        }
+        catch (Exception e)
+        {
+
         }
     }
 
     public void UpdateHistory(Move move, int depth)
     {
-        if (!move.IsCapture && move.From >= 0 && move.From < 64 && move.To >= 0 && move.To < 64)
+        try
         {
-            _history[move.From, move.To] += depth * depth;
 
-            // Prevent overflow
-            if (_history[move.From, move.To] > 100000)
+
+            if (!move.IsCapture && move.From >= 0 && move.From < 64 && move.To >= 0 && move.To < 64)
             {
-                // Scale down all history values
-                for (int i = 0; i < 64; i++)
+                _history[move.From, move.To] += depth * depth;
+
+                // Prevent overflow
+                if (_history[move.From, move.To] > 100000)
                 {
-                    for (int j = 0; j < 64; j++)
+                    // Scale down all history values
+                    for (int i = 0; i < 64; i++)
                     {
-                        _history[i, j] /= 2;
+                        for (int j = 0; j < 64; j++)
+                        {
+                            _history[i, j] /= 2;
+                        }
                     }
                 }
             }
+        }
+        catch (Exception e)
+        {
+
         }
     }
 

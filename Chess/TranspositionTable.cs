@@ -140,6 +140,10 @@ public unsafe class TranspositionTable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Store(ulong hash, int depth, int score, TTFlag flag, Move move)
     {
+        try
+        {
+
+
         ulong index = (hash & _indexMask) * ClusterSize;
         TTEntry* cluster = _entries + index;
 
@@ -175,7 +179,11 @@ public unsafe class TranspositionTable
         entry.Score = (short)Math.Clamp(score, short.MinValue, short.MaxValue);
         entry.Depth = (byte)Math.Min(depth, 255);
         entry.SetFlag(flag, _currentAge);
-        entry.SetMove(move);
+            entry.SetMove(move);
+        }catch(Exception e)
+        {
+
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
