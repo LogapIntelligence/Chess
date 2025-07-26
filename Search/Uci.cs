@@ -200,10 +200,10 @@ namespace Search
             searchTask?.Wait();
         }
 
-        private Move ParseMove(string moveStr)
+        private Move.Move ParseMove(string moveStr)
         {
             if (moveStr.Length < 4)
-                return new Move();
+                return new Move.Move();
 
             var from = ParseSquare(moveStr.Substring(0, 2));
             var to = ParseSquare(moveStr.Substring(2, 2));
@@ -250,7 +250,7 @@ namespace Search
                 }
             }
 
-            return new Move(from, to, flags);
+            return new Move.Move(from, to, flags);
         }
 
         private Square ParseSquare(string sq)
@@ -258,7 +258,7 @@ namespace Search
             if (sq.Length != 2)
                 return Square.NoSquare;
 
-            var file = (File)(sq[0] - 'a');
+            var file = (Move.File)(sq[0] - 'a');
             var rank = (Rank)(sq[1] - '1');
 
             return Types.CreateSquare(file, rank);

@@ -20,7 +20,7 @@ namespace Search
         public Move.Move Move;
         public short Score;
         public byte Depth;
-        public byte Flag;
+        public TTFlag Flag;
         public byte Age;
 
         public TTEntry(ulong key, Move.Move move, int score, int depth, TTFlag flag, int age)
@@ -29,7 +29,7 @@ namespace Search
             Move = move;
             Score = (short)score;
             Depth = (byte)depth;
-            Flag = (byte)flag;
+            Flag = Flag = flag;
             Age = (byte)age;
         }
     }

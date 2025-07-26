@@ -43,8 +43,8 @@ namespace Search
                 }
                 else
                 {
-                    // History heuristic
-                    moveScores[i] = historyTable[move.From, move.To];
+                    // History heuristic - cast Square to int
+                    moveScores[i] = historyTable[(int)move.From, (int)move.To];
                 }
             }
 

@@ -5,6 +5,7 @@ using Move;
 
 namespace Search
 {
+    unsafe
     public class Search
     {
         // Constants
@@ -241,15 +242,16 @@ namespace Search
             var ttEntry = tt.Probe(rootPosition.GetHash());
             var ttMove = ttEntry?.Move ?? new Move.Move();
 
-            if (ttEntry != null && ttEntry.Depth >= depth && !pvNode)
+            if (ttEntry.HasValue && ttEntry.Value.Depth >= depth && !pvNode)
             {
-                var ttScore = ScoreFromTT(ttEntry.Score, ply);
+                var entry = ttEntry.Value;
+                var ttScore = ScoreFromTT(entry.Score, ply);
 
-                if (ttEntry.Flag == TTFlag.Exact)
+                if (entry.Flag == TTFlag.Exact)
                     return ttScore;
-                else if (ttEntry.Flag == TTFlag.LowerBound && ttScore >= beta)
+                else if (entry.Flag == TTFlag.LowerBound && ttScore >= beta)
                     return ttScore;
-                else if (ttEntry.Flag == TTFlag.UpperBound && ttScore <= alpha)
+                else if (entry.Flag == TTFlag.UpperBound && ttScore <= alpha)
                     return ttScore;
             }
 
@@ -341,7 +343,7 @@ namespace Search
                                 killerMoves[ply, 0] = move;
 
                                 // Update history
-                                historyTable[move.From, move.To] += depth * depth;
+                                historyTable[(int)move.From, (int)move.To] += depth * depth;
                             }
 
                             break;
@@ -428,7 +430,7 @@ namespace Search
             return moves;
         }
 
-        private unsafe Move[] GenerateCaptures(bool inCheck)
+        private unsafe Move.Move[] GenerateCaptures(bool inCheck)
         {
             if (inCheck)
                 return GenerateMoves();
@@ -566,7 +568,7 @@ namespace Search
         private void PrintSearchInfo(SearchResult result)
         {
             Console.WriteLine($"info depth {result.Depth} score cp {result.Score} " +
-                            $"nodes {result.Nodes} nps {result.Nodes * 1000 / Math.Max(1, result.Time)} " +
+                            $"nodes {result.Nodes} nps {result.Nodes * 1000 / (ulong)Math.Max(1, result.Time)} " +
                             $"time {result.Time} pv {string.Join(" ", result.Pv)}");
         }
     }
