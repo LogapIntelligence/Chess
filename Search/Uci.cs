@@ -78,7 +78,7 @@ namespace Search
 
         private void HandleUci()
         {
-            Console.WriteLine("id name ChessEngine");
+            Console.WriteLine("id name CE");
             Console.WriteLine("id author Assistant");
             Console.WriteLine("option name Hash type spin default 128 min 1 max 16384");
             Console.WriteLine("option name Threads type spin default 1 min 1 max 256");

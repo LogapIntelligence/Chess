@@ -339,8 +339,6 @@ namespace Search
             {
 
             }
-            Console.WriteLine($"alpha-beta: ply={ply} depth={depth} α={alpha} β={beta} hash={rootPosition.GetHash()}");
-
             // Check time and stop conditions
             if ((NodesSearched & 2047) == 0 && ShouldStopSearch())
                 return 0;
@@ -400,9 +398,9 @@ namespace Search
                 }
             }
 
-            // Quiescence search at leaf nodes
+            // At leaf nodes, return static evaluation
             if (depth <= 0)
-                return Quiescence(alpha, beta, ply);
+                return Evaluate();
 
             // Static evaluation
             var inCheck = rootPosition.InCheck(rootPosition.Turn);
@@ -429,13 +427,7 @@ namespace Search
             bool improving = ply >= 2 && !inCheck &&
                            staticEval > staticEvalStack[ply - 2];
 
-            // Razoring
-            if (!pvNode && !inCheck && depth <= 3 && staticEval + 300 * depth < alpha)
-            {
-                int razorScore = Quiescence(alpha, beta, ply);
-                if (razorScore <= alpha)
-                    return razorScore;
-            }
+            // Razoring - removed since it depends on quiescence
 
             // Futility pruning
             if (!pvNode && !inCheck && depth <= 8 &&
@@ -452,12 +444,6 @@ namespace Search
                 int R = 3 + depth / 6 + Math.Min(3, (staticEval - beta) / 200);
                 R = Math.Min(depth - 1, R);
 
-                // For null move, we need to create a special null move
-                // Since we can't make an actual null move with the current Position class,
-                // we'll skip null move pruning for now
-                // TODO: Add null move support to Position class
-
-
                 rootPosition.MakeNullMove();
                 int nullScore = -AlphaBeta(depth - R - 1, -beta, -beta + 1, ply + 1, false);
                 rootPosition.UnmakeNullMove();
@@ -467,7 +453,7 @@ namespace Search
                     // Don't return mate scores from null move
                     if (nullScore >= MATE_VALUE - MAX_PLY)
                         nullScore = beta;
-                    
+
                     return nullScore;
                 }
             }
@@ -515,7 +501,6 @@ namespace Search
                 // Make move
                 var colorToMove = rootPosition.Turn;
                 rootPosition.Play(colorToMove, move);
-
 
                 // Check if move is legal (gives check)
                 bool givesCheck = rootPosition.InCheck(rootPosition.Turn);
@@ -601,75 +586,6 @@ namespace Search
             return bestScore;
         }
 
-        private int Quiescence(int alpha, int beta, int ply)
-        {
-            NodesSearched++;
-
-            if (ply >= MAX_PLY)
-                return Evaluate();
-
-            var inCheck = rootPosition.InCheck(rootPosition.Turn);
-            var standPat = inCheck ? -INFINITY : Evaluate();
-
-            if (!inCheck)
-            {
-                if (standPat >= beta)
-                    return beta;
-
-                // Big delta pruning
-                const int BIG_DELTA = 900; // Queen value
-                if (standPat < alpha - BIG_DELTA)
-                    return alpha;
-
-                if (standPat > alpha)
-                    alpha = standPat;
-            }
-
-            // Generate captures using pre-allocated buffer
-            var moves = moveBuffers[ply];
-            var moveCount = GenerateCapturesInto(moves, inCheck);
-
-            if (inCheck && moveCount == 0)
-                return -MATE_VALUE + ply;
-
-            // Order captures
-            moveCount = OrderCapturesInPlace(moves, moveCount, ply);
-
-            for (int i = 0; i < moveCount; i++)
-            {
-                var move = moves[i];
-
-                // Delta pruning with promotion consideration
-                if (!inCheck)
-                {
-                    int materialGain = GetPieceValue(rootPosition.At(move.To));
-
-                    // Add promotion value
-                    if ((move.Flags & MoveFlags.Promotions) != 0)
-                    {
-                        materialGain += GetPromotionValue(move.Flags) - 100; // Pawn value
-                    }
-
-                    if (standPat + materialGain + 200 < alpha)
-                        continue;
-                }
-
-                // FIX: Save the color before making the move
-                var colorToMove = rootPosition.Turn;
-                rootPosition.Play(colorToMove, move);
-                var score = -Quiescence(-beta, -alpha, ply + 1);
-                rootPosition.Undo(colorToMove, move);  // Use the saved color
-
-                if (score > alpha)
-                {
-                    alpha = score;
-                    if (score >= beta)
-                        return beta;
-                }
-            }
-
-            return alpha;
-        }
         // Helper methods
         private int LogarithmicReduction(int depth, int moveNumber)
         {

@@ -7,9 +7,6 @@ class Program
 {
     static async Task Main(string[] args)
     {
-        Console.WriteLine("Chess Engine Search Module");
-        Console.WriteLine("==========================");
-
         // Initialize move generation tables
         Tables.Init();
         Zobrist.Init();
@@ -22,7 +19,6 @@ class Program
         }
         else
         {
-            Console.WriteLine("UCI");
             // Demo mode
             var uci = new UCI();
             await uci.Run();
