@@ -54,11 +54,11 @@ namespace Search
                         break;
 
                     case "stop":
-                        HandleStop();
+                        await HandleStop();  // Make it async
                         break;
 
                     case "quit":
-                        HandleStop();
+                        await HandleStop();  // Make it async
                         return;
 
                     case "d":
@@ -76,7 +76,7 @@ namespace Search
 
         private void HandleUci()
         {
-            Console.WriteLine("id name CE2");
+            Console.WriteLine("id name CE3");
             Console.WriteLine("id author Assistant");
             Console.WriteLine("option name Hash type spin default 128 min 1 max 16384");
             Console.WriteLine("option name Threads type spin default 1 min 1 max 1");
@@ -210,30 +210,68 @@ namespace Search
                 limits.MoveTime = 5000;  // 5 seconds per move
             }
 
-            // Debug output for infinite search
-            if (limits.Infinite)
-            {
-            }
-
             // Stop any ongoing search
-            HandleStop();
+            await HandleStop();
 
             // Start new search
             searchCancellation = new CancellationTokenSource();
             searchTask = Task.Run(() =>
             {
-                var result = search.StartSearch(position, limits);
-                Console.WriteLine($"bestmove {result.BestMove}");
+                try
+                {
+                    var result = search.StartSearch(position, limits);
+                    // Only output bestmove if not cancelled
+                    if (!searchCancellation.Token.IsCancellationRequested)
+                    {
+                        Console.WriteLine($"bestmove {result.BestMove}");
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Search was cancelled, don't output anything
+                }
             }, searchCancellation.Token);
 
-            await searchTask;
+            try
+            {
+                await searchTask;
+            }
+            catch (OperationCanceledException)
+            {
+                // Normal cancellation, ignore
+            }
         }
 
-
-        private void HandleStop()
+        private async Task HandleStop()
         {
-            searchCancellation?.Cancel();
-            searchTask?.Wait();
+            if (searchCancellation != null && searchTask != null)
+            {
+                // First tell the search to stop
+                search.StopSearch();
+
+                // Then cancel the task
+                searchCancellation.Cancel();
+
+                try
+                {
+                    // Wait for the task to complete with a timeout
+                    await searchTask.WaitAsync(TimeSpan.FromSeconds(1));
+                }
+                catch (TimeoutException)
+                {
+                    // If it doesn't stop in time, we'll continue anyway
+                    Console.Error.WriteLine("Warning: Search didn't stop in time");
+                }
+                catch (OperationCanceledException)
+                {
+                    // This is expected
+                }
+
+                // Clean up
+                searchCancellation.Dispose();
+                searchCancellation = null;
+                searchTask = null;
+            }
         }
 
         private Move.Move ParseMove(string moveStr)

@@ -25,6 +25,8 @@ namespace Search
         private readonly Move.Move[][] moveBuffers;
         private readonly ArrayPool<Move.Move> movePool;
 
+        private readonly object searchLock = new object();
+
         // Statistics
         public ulong NodesSearched { get; private set; }
         public int SelectiveDepth { get; private set; }
@@ -74,8 +76,16 @@ namespace Search
 
         public SearchResult StartSearch(Position position, SearchLimits limits)
         {
+            lock (searchLock)
+            {
+                // Cancel any previous search
+                searchCancellation?.Cancel();
+                searchCancellation?.Dispose();
+
+                // Create new cancellation token
+                searchCancellation = new CancellationTokenSource();
+            }
             rootPosition = new Position(position);
-            searchCancellation = new CancellationTokenSource();
 
             // Reset search state
             NodesSearched = 0;
@@ -765,13 +775,19 @@ namespace Search
         // Search control
         private bool ShouldStopSearch()
         {
-            return searchCancellation?.IsCancellationRequested ?? false ||
-                   timeManager.ShouldStop();
+            // Check cancellation more frequently
+            if (searchCancellation?.IsCancellationRequested ?? false)
+                return true;
+
+            return timeManager.ShouldStop();
         }
 
         public void StopSearch()
         {
-            searchCancellation?.Cancel();
+            lock (searchLock)
+            {
+                searchCancellation?.Cancel();
+            }
         }
 
         private void PrintSearchInfo(SearchResult result)
