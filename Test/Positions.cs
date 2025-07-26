@@ -55,7 +55,7 @@ namespace Test
             },
             new(){
                 Title = "rooks",
-                FEN = "2bk1b2/8/8/8/8/8/8/2B1KB2 w - - 0 1",
+                FEN = "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1",
                 P1 = 26,
                 P2 = 568,
                 P3 = 13744,

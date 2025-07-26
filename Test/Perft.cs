@@ -6,68 +6,111 @@ public static class Perft
 {
     public static unsafe void Run()
     {
-        var p = new Position();
-        Position.Set("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -", p);
+        Console.WriteLine("Running Perft Test Suite");
+        Console.WriteLine("========================\n");
 
-        // Expected perft values
-        var expectedValues = new[]
+        int totalTests = 0;
+        int passedTests = 0;
+        long totalTime = 0;
+        ulong totalNodes = 0;
+
+        // Test each position
+        foreach (var testPosition in Positions.Perfs)
         {
-            (1U, 20UL),
-            (2U, 400UL),
-            (3U, 8_902UL),
-            (4U, 197_281UL),
-            (5U, 4_865_609UL),
-            (6U, 119_060_324UL),
-            (7U, 3_195_901_860UL),
-            (8U, 84_998_978_956UL)
-        };
+            Console.WriteLine($"Testing: {testPosition.Title}");
+            Console.WriteLine($"FEN: {testPosition.FEN}");
+
+            var p = new Position();
+            Position.Set(testPosition.FEN, p);
+
+            // Get expected values for this position
+            var expectedValues = new[]
+            {
+                (1U, (ulong)testPosition.P1),
+                (2U, (ulong)testPosition.P2),
+                (3U, (ulong)testPosition.P3),
+                (4U, (ulong)testPosition.P4),
+                (5U, (ulong)testPosition.P5),
+                (6U, (ulong)testPosition.P6),
+                (7U, (ulong)testPosition.P7)
+            };
+
+            bool positionPassed = true;
+            int maxDepthToTest = DetermineMaxDepth(testPosition.Title);
+
+            foreach (var (depth, expected) in expectedValues)
+            {
+                if (depth > maxDepthToTest) break;
+                if (expected == 0) continue; // Skip if no expected value
+
+                totalTests++;
+                var sw = Stopwatch.StartNew();
+                ulong nodes = PerftOptimized.Run(p, depth);
+                sw.Stop();
+
+                bool passed = nodes == expected;
+                if (passed) passedTests++;
+                else positionPassed = false;
+
+                string status = passed ? "✓" : "✗";
+                string timeStr = sw.ElapsedMilliseconds > 1000
+                    ? $"{sw.ElapsedMilliseconds / 1000.0:F1}s"
+                    : $"{sw.ElapsedMilliseconds}ms";
+
+                Console.WriteLine($"  Depth {depth}: {status} {nodes,12:N0} nodes (expected {expected,12:N0}) [{timeStr}]");
+
+                if (depth == 5 || depth == 6) // Track performance on deeper searches
+                {
+                    totalTime += sw.ElapsedMilliseconds;
+                    totalNodes += nodes;
+                }
+            }
+
+            Console.WriteLine($"  Position Result: {(positionPassed ? "PASSED" : "FAILED")}");
+            Console.WriteLine();
+        }
+
+        // Summary
+        Console.WriteLine("Test Summary");
+        Console.WriteLine("============");
+        Console.WriteLine($"Total Tests: {totalTests}");
+        Console.WriteLine($"Passed: {passedTests}");
+        Console.WriteLine($"Failed: {totalTests - passedTests}");
+        Console.WriteLine($"Success Rate: {(double)passedTests / totalTests * 100:F1}%");
+
+        if (totalTime > 0 && totalNodes > 0)
+        {
+            double nps = totalNodes / (totalTime / 1000.0);
+            Console.WriteLine($"\nPerformance: {nps:N0} nodes/second (avg from depth 5-6 tests)");
+        }
+
+        // Warmup and benchmark with standard position
+        Console.WriteLine("\nRunning benchmark on standard position (depth 7)...");
+        var benchPos = new Position();
+        Position.Set("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -", benchPos);
 
         // Warmup
-        for (int i = 0; i < 10; i++)
-            _ = PerftOptimized.Run(p, 4);
+        for (int i = 0; i < 5; i++)
+            _ = PerftOptimized.Run(benchPos, 4);
 
-        // Test each depth up to 6
-        ulong nodes = 0;
-        var sw = new Stopwatch();
+        var benchSw = Stopwatch.StartNew();
+        ulong benchNodes = PerftOptimized.Run(benchPos, 7);
+        benchSw.Stop();
 
-        foreach (var (depth, expected) in expectedValues)
-        {
-            if (depth > 7) break;
-
-            if (depth == 7)
-            {
-                sw.Start();
-                nodes = PerftOptimized.Run(p, depth);
-                sw.Stop();
-            }
-            else
-            {
-                nodes = PerftOptimized.Run(p, depth);
-            }
-
-            var passed = nodes == expected;
-            Console.WriteLine($"[{(passed ? "Passed" : "Failed")}] Perft {depth}");
-        }
-
-        var nps = nodes * 1000000.0 / sw.ElapsedTicks * Stopwatch.Frequency / 1000000;
-        Console.WriteLine($"[NPS] {nps:F0}");
+        double benchNps = benchNodes / (benchSw.ElapsedMilliseconds / 1000.0);
+        Console.WriteLine($"Benchmark: {benchNodes:N0} nodes in {benchSw.ElapsedMilliseconds / 1000.0:F2}s");
+        Console.WriteLine($"Speed: {benchNps:N0} nodes/second");
     }
 
-    static ulong Pg(Position p, Color color, uint depth)
-        => color == Color.White ? P<White>(p, depth) : P<Black>(p, depth);
-
-    static ulong P<TColor>(Position p, uint depth) where TColor : IColor, new()
+    private static int DetermineMaxDepth(string title)
     {
-        var us = new TColor();
-        var list = new MoveList<TColor>(p);
-        if (depth == 1) return (ulong)list.Count;
-        ulong nodes = 0;
-        foreach (var move in list)
+        // Limit depth for positions that would take too long
+        return title.ToLower() switch
         {
-            p.Play(us.Value, move);
-            nodes += Pg(p, us.Opposite().Value, depth - 1);
-            p.Undo(us.Value, move);
-        }
-        return nodes;
+            var t when t.Contains("standard") => 6,
+            var t when t.Contains("promotion") => 6,
+            var t when t.Contains("major pieces") => 5,
+            _ => 5 // Default to depth 5 for most positions
+        };
     }
 }

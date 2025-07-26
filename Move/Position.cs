@@ -188,20 +188,37 @@ namespace Move
             History[gamePly].Hash = hash;
 
             var type = m.Flags;
-            History[gamePly].Entry |= Bitboard.SQUARE_BB[(int)m.To] | Bitboard.SQUARE_BB[(int)m.From];
+            History[gamePly].Entry = History[gamePly - 1].Entry;
 
             // Reset halfmove clock on pawn move or capture
-            if (board[(int)m.From] == Types.MakePiece(us, PieceType.Pawn) ||
-                board[(int)m.To] != Piece.NoPiece ||
-                type == MoveFlags.EnPassant)
+            if (board[(int)m.From] == Types.MakePiece(us, PieceType.King))
             {
-                History[gamePly].HalfMoveClock = 0;
+                // King moved - remove castling rights for this side
+                if (us == Color.White)
+                    History[gamePly].Entry |= Bitboard.WHITE_OO_MASK | Bitboard.WHITE_OOO_MASK;
+                else
+                    History[gamePly].Entry |= Bitboard.BLACK_OO_MASK | Bitboard.BLACK_OOO_MASK;
             }
-            else
+            else if (board[(int)m.From] == Types.MakePiece(us, PieceType.Rook))
             {
-                History[gamePly].HalfMoveClock++;
+                // Rook moved - remove specific castling right
+                if (m.From == Square.a1 && us == Color.White) History[gamePly].Entry |= Bitboard.WHITE_OOO_MASK;
+                else if (m.From == Square.h1 && us == Color.White) History[gamePly].Entry |= Bitboard.WHITE_OO_MASK;
+                else if (m.From == Square.a8 && us == Color.Black) History[gamePly].Entry |= Bitboard.BLACK_OOO_MASK;
+                else if (m.From == Square.h8 && us == Color.Black) History[gamePly].Entry |= Bitboard.BLACK_OO_MASK;
             }
 
+            if (m.IsCapture && History[gamePly].Captured != Piece.NoPiece)
+            {
+                var capturedType = Types.TypeOf(History[gamePly].Captured);
+                if (capturedType == PieceType.Rook)
+                {
+                    if (m.To == Square.a1) History[gamePly].Entry |= Bitboard.WHITE_OOO_MASK;
+                    else if (m.To == Square.h1) History[gamePly].Entry |= Bitboard.WHITE_OO_MASK;
+                    else if (m.To == Square.a8) History[gamePly].Entry |= Bitboard.BLACK_OOO_MASK;
+                    else if (m.To == Square.h8) History[gamePly].Entry |= Bitboard.BLACK_OO_MASK;
+                }
+            }
             switch (type)
             {
                 case MoveFlags.Quiet:
