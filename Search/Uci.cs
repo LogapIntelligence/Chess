@@ -139,6 +139,7 @@ namespace Search
                         {
                             limits.Depth = depth;
                             hasTimeControl = true;
+                            i++; // Skip next argument since we consumed it
                         }
                         break;
 
@@ -147,6 +148,7 @@ namespace Search
                         {
                             limits.MoveTime = moveTime;
                             hasTimeControl = true;
+                            i++; // Skip next argument
                         }
                         break;
 
@@ -156,6 +158,7 @@ namespace Search
                         {
                             limits.Time = wtime;
                             hasTimeControl = true;
+                            i++; // Skip next argument
                         }
                         break;
 
@@ -165,38 +168,56 @@ namespace Search
                         {
                             limits.Time = btime;
                             hasTimeControl = true;
+                            i++; // Skip next argument
                         }
                         break;
 
                     case "winc":
                         if (i + 1 < parts.Length && long.TryParse(parts[i + 1], out long winc) &&
                             position.Turn == Color.White)
+                        {
                             limits.Inc = winc;
+                            i++; // Skip next argument
+                        }
                         break;
 
                     case "binc":
                         if (i + 1 < parts.Length && long.TryParse(parts[i + 1], out long binc) &&
                             position.Turn == Color.Black)
+                        {
                             limits.Inc = binc;
+                            i++; // Skip next argument
+                        }
                         break;
 
                     case "movestogo":
                         if (i + 1 < parts.Length && int.TryParse(parts[i + 1], out int mtg))
+                        {
                             limits.MovesToGo = mtg;
+                            i++; // Skip next argument
+                        }
                         break;
 
                     case "infinite":
                         limits.Infinite = true;
                         hasTimeControl = true;
+                        Console.WriteLine("info string infinite search mode enabled");
                         break;
                 }
             }
 
-            // If no time control specified, set reasonable defaults
+            // If no time control specified and not infinite, set reasonable defaults
             if (!hasTimeControl)
             {
                 limits.Depth = 12;  // Reasonable depth limit
                 limits.MoveTime = 5000;  // 5 seconds per move
+                Console.WriteLine("info string using default time control: depth 12, 5000ms");
+            }
+
+            // Debug output for infinite search
+            if (limits.Infinite)
+            {
+                Console.WriteLine("info string starting infinite search");
             }
 
             // Stop any ongoing search

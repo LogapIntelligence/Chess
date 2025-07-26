@@ -776,22 +776,7 @@ namespace Search
         // Evaluation (simplified - should be in separate evaluator)
         private int Evaluate()
         {
-            var score = 0;
-
-            // Material count
-            score += BitboardUtils.PopCount(rootPosition.BitboardOf(Color.White, PieceType.Pawn)) * 100;
-            score += BitboardUtils.PopCount(rootPosition.BitboardOf(Color.White, PieceType.Knight)) * 320;
-            score += BitboardUtils.PopCount(rootPosition.BitboardOf(Color.White, PieceType.Bishop)) * 330;
-            score += BitboardUtils.PopCount(rootPosition.BitboardOf(Color.White, PieceType.Rook)) * 500;
-            score += BitboardUtils.PopCount(rootPosition.BitboardOf(Color.White, PieceType.Queen)) * 900;
-
-            score -= BitboardUtils.PopCount(rootPosition.BitboardOf(Color.Black, PieceType.Pawn)) * 100;
-            score -= BitboardUtils.PopCount(rootPosition.BitboardOf(Color.Black, PieceType.Knight)) * 320;
-            score -= BitboardUtils.PopCount(rootPosition.BitboardOf(Color.Black, PieceType.Bishop)) * 330;
-            score -= BitboardUtils.PopCount(rootPosition.BitboardOf(Color.Black, PieceType.Rook)) * 500;
-            score -= BitboardUtils.PopCount(rootPosition.BitboardOf(Color.Black, PieceType.Queen)) * 900;
-
-            return rootPosition.Turn == Color.White ? score : -score;
+            return Evaluation.Evaluate(rootPosition);
         }
 
         private int GetPieceValue(Piece piece)

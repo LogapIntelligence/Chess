@@ -49,8 +49,8 @@ namespace Search
             else
             {
                 // No time limit - but set reasonable defaults to prevent infinite search
-                allocatedTime = 10000; // 10 seconds default
-                maxTime = 30000; // 30 seconds max
+                allocatedTime = int.MaxValue; // 10 seconds default
+                maxTime = int.MaxValue; // 30 seconds max
             }
         }
 
