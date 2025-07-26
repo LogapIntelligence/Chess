@@ -236,6 +236,7 @@ namespace Move
             {
                 s = Bitboard.PopLsb(ref b1);
                 var pt = Types.TypeOf(pos.At(s));
+                if (pt == PieceType.Pawn) continue;
                 b2 = Tables.Attacks(pt, s, all) & Tables.LINE[(int)ourKing][(int)s];
                 MakeQuiet(s, b2 & quietMask, list, ref listIdx);
                 MakeCapture(s, b2 & captureask, list, ref listIdx);

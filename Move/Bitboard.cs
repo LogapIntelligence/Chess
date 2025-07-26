@@ -121,9 +121,9 @@ namespace Move
 
         public static Square PopLsb(ref ulong b)
         {
-            int lsb = Bsf(b);
+            Square lsb = Bsf(b);  // Now the types match
             b &= b - 1;
-            return (Square)lsb;
+            return lsb;  // No cast needed
         }
 
         public static Square Bsf(ulong b)

@@ -67,10 +67,7 @@ static void TestPerft()
     Console.WriteLine($"Time difference = {sw.ElapsedMilliseconds} [milliseconds]");
 }
 
-static void Main(string[] args)
-{
-    Tables.InitialiseAllDatabases();
-    Zobrist.InitialiseZobristKeys();
+Tables.InitialiseAllDatabases();
+Zobrist.InitialiseZobristKeys();
 
-    TestPerft();
-}
+TestPerft();
