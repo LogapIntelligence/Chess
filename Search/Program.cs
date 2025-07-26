@@ -22,8 +22,10 @@ class Program
         }
         else
         {
+            Console.WriteLine("UCI");
             // Demo mode
-            await RunDemo();
+            var uci = new UCI();
+            await uci.Run();
         }
     }
 
@@ -36,7 +38,7 @@ class Program
         Position.Set(Types.DEFAULT_FEN, position);
 
         // Create search engine
-        var searchEngine = new Search.Search(128, 4); // 128MB hash, 4 threads
+        var searchEngine = new Search.Search(128, 1); // 128MB hash, 4 threads
 
         // Set up search limits
         var limits = new SearchLimits

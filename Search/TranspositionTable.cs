@@ -29,7 +29,7 @@ namespace Search
             Move = move;
             Score = (short)score;
             Depth = (byte)depth;
-            Flag = Flag = flag;
+            Flag = flag;
             Age = (byte)age;
         }
     }
@@ -62,7 +62,7 @@ namespace Search
 
             // Replace if empty, same position, or better depth/newer
             if (entry.Key == 0 ||
-                (entry.Key ^ entry.Move.ToFrom) == key ||
+                (entry.Key ^ (ulong)entry.Move.ToFrom) == key ||
                 entry.Age != currentAge ||
                 depth >= entry.Depth)
             {
@@ -76,7 +76,7 @@ namespace Search
             var index = (int)(key & (ulong)mask);
             ref var entry = ref entries[index];
 
-            if (entry.Key != 0 && (entry.Key ^ entry.Move.ToFrom) == key)
+            if (entry.Key != 0 && (entry.Key ^ (ulong)entry.Move.ToFrom) == key)
             {
                 entry.Age = (byte)currentAge; // Refresh age
                 return entry;
