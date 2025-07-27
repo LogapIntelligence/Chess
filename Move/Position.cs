@@ -331,7 +331,7 @@ namespace Move
         }
         public void Undo(Color us, Move m)
         {
-            // hash = History[gamePly].Hash;
+            hash = History[gamePly].Hash;
 
             var type = m.Flags;
             switch (type)

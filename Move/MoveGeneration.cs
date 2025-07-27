@@ -311,7 +311,8 @@ namespace Move
                 }
                 else
                 {
-                    b2 = Tables.PawnAttacks(usColor, s) & pos.AllPieces(usColor.Flip()) & Tables.LINE[(int)s][(int)ourKing];
+                    b2 = Tables.PawnAttacks(usColor, s) & pos.AllPieces(usColor.Flip()) & Tables.LINE[(int)ourKing][(int)s];
+
                     MakeCaptureInto(s, b2, moveList, ref listIdx);
 
                     var northDir = Types.RelativeDir(usColor, Direction.North);

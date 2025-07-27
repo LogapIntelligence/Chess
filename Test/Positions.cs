@@ -111,13 +111,13 @@ namespace Test
             new(){
                 Title = "bishops pawns and rooks",
                 FEN = "3kr3/7p/8/b2p2P1/1p2P2B/8/P7/3RK3 w - - 0 1",
-                P1 = 18,
-                P2 = 308,
-                P3 = 5353,
-                P4 = 91461,
-                P5 = 1561105,
-                P6 = 26214838,
-                P7 = 435307144
+                P1 = 17,
+                P2 = 263,
+                P3 = 4760,
+                P4 = 87145,
+                P5 = 1737314,
+                P6 = 34741198,
+                P7 = 729088284
             },
             new(){
                 Title = "bishops pawns rooks knights queens",

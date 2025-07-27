@@ -104,13 +104,6 @@ public static class Perft
 
     private static int DetermineMaxDepth(string title)
     {
-        // Limit depth for positions that would take too long
-        return title.ToLower() switch
-        {
-            var t when t.Contains("standard") => 6,
-            var t when t.Contains("promotion") => 6,
-            var t when t.Contains("major pieces") => 5,
-            _ => 5 // Default to depth 5 for most positions
-        };
+        return 6;
     }
 }
