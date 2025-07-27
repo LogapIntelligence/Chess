@@ -14,6 +14,7 @@ namespace Search
         private Position position;
         private Task? searchTask;
         private CancellationTokenSource? searchCancellation;
+        private readonly object positionLock = new object();
 
         public UCI()
         {
@@ -45,11 +46,11 @@ namespace Search
                         break;
 
                     case "ucinewgame":
-                        HandleNewGame();
+                        await HandleNewGame();
                         break;
 
                     case "position":
-                        HandlePosition(parts);
+                        await HandlePosition(parts);
                         break;
 
                     case "go":
@@ -66,7 +67,10 @@ namespace Search
 
                     case "d":
                     case "display":
-                        Console.WriteLine(position);
+                        lock (positionLock)
+                        {
+                            Console.WriteLine(position);
+                        }
                         break;
 
                     case "perft":
@@ -90,50 +94,64 @@ namespace Search
             SendCommand("uciok");
         }
 
-        private void HandleNewGame()
+        private async Task HandleNewGame()
         {
-            position = new Position();
-            Position.Set(Types.DEFAULT_FEN, position);
-        }
+            // Stop any ongoing search
+            await HandleStop();
 
-        private void HandlePosition(string[] parts)
-        {
-            var movesIndex = Array.IndexOf(parts, "moves");
-
-            if (parts.Length > 1 && parts[1] == "startpos")
+            lock (positionLock)
             {
                 position = new Position();
                 Position.Set(Types.DEFAULT_FEN, position);
             }
-            else if (parts.Length > 1 && parts[1] == "fen")
-            {
-                // Reconstruct FEN string
-                var fenParts = new string[movesIndex > 0 ? movesIndex - 2 : parts.Length - 2];
-                Array.Copy(parts, 2, fenParts, 0, fenParts.Length);
-                var fen = string.Join(" ", fenParts);
+        }
 
-                position = new Position();
-                Position.Set(fen, position);
-            }
+        private async Task HandlePosition(string[] parts)
+        {
+            // CRITICAL: Stop any ongoing search before updating position
+            await HandleStop();
 
-            // Apply moves
-            if (movesIndex > 0)
+            lock (positionLock)
             {
-                for (int i = movesIndex + 1; i < parts.Length; i++)
+                var movesIndex = Array.IndexOf(parts, "moves");
+
+                if (parts.Length > 1 && parts[1] == "startpos")
                 {
-                    var move = ParseMove(parts[i]);
-                    if (move.From != move.To)
+                    position = new Position();
+                    Position.Set(Types.DEFAULT_FEN, position);
+                }
+                else if (parts.Length > 1 && parts[1] == "fen")
+                {
+                    // Reconstruct FEN string
+                    var fenParts = new string[movesIndex > 0 ? movesIndex - 2 : parts.Length - 2];
+                    Array.Copy(parts, 2, fenParts, 0, fenParts.Length);
+                    var fen = string.Join(" ", fenParts);
+
+                    position = new Position();
+                    Position.Set(fen, position);
+                }
+
+                // Apply moves
+                if (movesIndex > 0)
+                {
+                    for (int i = movesIndex + 1; i < parts.Length; i++)
                     {
-                        position.Play(position.Turn, move);
+                        var move = ParseMove(parts[i]);
+                        if (move.From != move.To)
+                        {
+                            position.Play(position.Turn, move);
+                        }
                     }
                 }
             }
         }
+
         private void SendCommand(string command)
         {
             Console.WriteLine(command);
             Console.Out.Flush();
         }
+
         private async Task HandleGo(string[] parts)
         {
             // Check if this is a perft command
@@ -234,15 +252,25 @@ namespace Search
             // Stop any ongoing search
             await HandleStop();
 
+            // Create a copy of the position for the search thread
+            Position searchPosition;
+            lock (positionLock)
+            {
+                searchPosition = new Position(position);
+            }
+
             // Start new search
             searchCancellation = new CancellationTokenSource();
+            var cancellationToken = searchCancellation.Token;
+
             searchTask = Task.Run(() =>
             {
                 try
                 {
-                    var result = search.StartSearch(position, limits);
+                    var result = search.StartSearch(searchPosition, limits);
+
                     // Only output bestmove if not cancelled
-                    if (!searchCancellation.Token.IsCancellationRequested)
+                    if (!cancellationToken.IsCancellationRequested)
                     {
                         SendCommand($"bestmove {result.BestMove}");
                     }
@@ -251,15 +279,24 @@ namespace Search
                 {
                     // Search was cancelled, don't output anything
                 }
-            }, searchCancellation.Token);
+                catch (Exception ex)
+                {
+                    // Log any unexpected errors
+                    Console.Error.WriteLine($"Search error: {ex.Message}");
+                }
+            }, cancellationToken);
 
-            try
+            // Don't await the search task here for infinite analysis
+            if (!limits.Infinite)
             {
-                await searchTask;
-            }
-            catch (OperationCanceledException)
-            {
-                // Normal cancellation, ignore
+                try
+                {
+                    await searchTask;
+                }
+                catch (OperationCanceledException)
+                {
+                    // Normal cancellation, ignore
+                }
             }
         }
 
@@ -276,7 +313,7 @@ namespace Search
                 try
                 {
                     // Wait for the task to complete with a timeout
-                    await searchTask.WaitAsync(TimeSpan.FromSeconds(1));
+                    await searchTask.WaitAsync(TimeSpan.FromSeconds(2));
                 }
                 catch (TimeoutException)
                 {
