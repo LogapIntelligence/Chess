@@ -185,7 +185,6 @@ namespace Move
             sideToPlay = sideToPlay.Flip();
             ++gamePly;
             History[gamePly] = new UndoInfo(History[gamePly - 1]);
-            History[gamePly].Hash = hash;
             var type = m.Flags;
             History[gamePly].Entry = History[gamePly - 1].Entry;
 
@@ -332,7 +331,7 @@ namespace Move
         }
         public void Undo(Color us, Move m)
         {
-            hash = History[gamePly].Hash;
+            // hash = History[gamePly].Hash;
 
             var type = m.Flags;
             switch (type)
@@ -399,6 +398,7 @@ namespace Move
                     PutPiece(History[gamePly].Captured, m.To);
                     break;
             }
+            hash ^= Zobrist.SideToMove;
 
             sideToPlay = sideToPlay.Flip();
             --gamePly;
