@@ -143,14 +143,14 @@ namespace Test
             },
             new(){
                 Title = "pawn knight king bishop queen rook enpassant promotion",
-                FEN = "r2k3r/1pq5/2b5/6Np/Pn6/5B2/5QP1/R3K2R w KQkq - 0 1",
+                FEN = "r3k2r/1pq5/2b5/6Np/Pn6/5B2/5QP1/R3K2R w KQkq - 0 1",
                 P1 = 46,
-                P2 = 1835,
-                P3 = 75154,
-                P4 = 2993847,
-                P5 = 120745301,
-                P6 = 4808030694,
-                P7 = 192968428152
+                P2 = 1911,
+                P3 = 78942,
+                P4 = 3177521,
+                P5 = 128733003,
+                P6 = 5120701935,
+                P7 = 0
             },
             new(){
                 Title = "flipped standard",
@@ -165,14 +165,14 @@ namespace Test
             },
             new(){
                 Title = "major pieces",
-                FEN = "rnbk1bnr/3q4/8/8/8/8/3Q4/RNBK1BNR w KQkq - 0 1",
-                P1 = 36,
-                P2 = 1190,
-                P3 = 43693,
-                P4 = 1558933,
-                P5 = 60772455,
-                P6 = 2349024280,
-                P7 = 96982521235
+                FEN = "rnbqkbnr/8/8/8/8/8/8/RNBQKBNR w KQkq - 0 1",
+                P1 = 50,
+                P2 = 2125,
+                P3 = 96062,
+                P4 = 4200525,
+                P5 = 191462298,
+                P6 = 8509434052,
+                P7 = 0
             },
         ];
     }
