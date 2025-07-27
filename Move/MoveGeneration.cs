@@ -297,6 +297,17 @@ namespace Move
                 {
                     b2 = Tables.PawnAttacks(usColor, s) & captureask & Tables.LINE[(int)ourKing][(int)s];
                     MakePromotionCapturesInto(s, b2, moveList, ref listIdx);
+
+                    var northDir = Types.RelativeDir(usColor, Direction.North);
+                    b2 = Bitboard.Shift((Direction)northDir, Bitboard.SQUARE_BB[(int)s]) & ~all & Tables.LINE[(int)ourKing][(int)s];
+                    while (b2 != 0)
+                    {
+                        var to = Bitboard.PopLsb(ref b2);
+                        moveList[listIdx++] = new Move(s, to, MoveFlags.PrKnight);
+                        moveList[listIdx++] = new Move(s, to, MoveFlags.PrBishop);
+                        moveList[listIdx++] = new Move(s, to, MoveFlags.PrRook);
+                        moveList[listIdx++] = new Move(s, to, MoveFlags.PrQueen);
+                    }
                 }
                 else
                 {

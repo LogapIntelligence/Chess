@@ -78,14 +78,26 @@ namespace Move
         }
         private void MovePiece(Square from, Square to)
         {
-            hash ^= Zobrist.ZobristTable[(int)board[(int)from], (int)from]
-                 ^ Zobrist.ZobristTable[(int)board[(int)from], (int)to]
-                 ^ Zobrist.ZobristTable[(int)board[(int)to], (int)to];
+            var movingPiece = board[(int)from];
+            var capturedPiece = board[(int)to];
 
-            ulong mask = Bitboard.SQUARE_BB[(int)from] | Bitboard.SQUARE_BB[(int)to];
-            pieceBB[(int)board[(int)from]] ^= mask;
-            pieceBB[(int)board[(int)to]] &= ~mask;
-            board[(int)to] = board[(int)from];
+            // Update hash
+            hash ^= Zobrist.ZobristTable[(int)movingPiece, (int)from]
+                 ^ Zobrist.ZobristTable[(int)movingPiece, (int)to];
+
+            if (capturedPiece != Piece.NoPiece)
+                hash ^= Zobrist.ZobristTable[(int)capturedPiece, (int)to];
+
+            // Update bitboards
+            ulong fromBB = Bitboard.SQUARE_BB[(int)from];
+            ulong toBB = Bitboard.SQUARE_BB[(int)to];
+
+            pieceBB[(int)movingPiece] ^= fromBB | toBB;
+            if (capturedPiece != Piece.NoPiece)
+                pieceBB[(int)capturedPiece] &= ~toBB;
+
+            // Update board
+            board[(int)to] = movingPiece;
             board[(int)from] = Piece.NoPiece;
         }
 
