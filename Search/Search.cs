@@ -14,6 +14,7 @@ namespace Search
         public const int INFINITY = 30000;
         public const int MATE_VALUE = 29000;
         public const int DRAW_VALUE = 0;
+        public const int QSEARCH_DEPTH = -1;  // Special depth marker for quiescence
 
         // Search state
         private Position rootPosition;
@@ -30,6 +31,7 @@ namespace Search
         // Statistics
         public ulong NodesSearched { get; private set; }
         public int SelectiveDepth { get; private set; }
+        public ulong QNodes { get; private set; }  // Quiescence nodes
 
         // Principal Variation
         private readonly Move.Move[,] pvTable;
@@ -47,7 +49,7 @@ namespace Search
 
         // Time management
         private readonly TimeManager timeManager;
-        private volatile bool stopSearch = false;  // Made volatile for thread safety
+        private volatile bool stopSearch = false;
 
         public Search(int ttSizeMB = 128, int threadCount = 1)
         {
@@ -83,6 +85,7 @@ namespace Search
 
             // Reset search state
             NodesSearched = 0;
+            QNodes = 0;
             SelectiveDepth = 0;
             Array.Clear(killerMoves, 0, killerMoves.Length);
             Array.Clear(historyTable, 0, historyTable.Length);
@@ -117,7 +120,7 @@ namespace Search
             // Iterative deepening loop
             for (int depth = 1; depth <= limits.Depth && !ShouldStopSearch(); depth++)
             {
-                var initialAspWindow = depth >= 4 ? 50 : INFINITY; // Start with reasonable window
+                var initialAspWindow = depth >= 4 ? 50 : INFINITY;
                 var alpha = -INFINITY;
                 var beta = INFINITY;
 
@@ -144,37 +147,32 @@ namespace Search
                     // Check aspiration window failure
                     if (bestScore <= alpha)
                     {
-                        // Fail low - we need to search with lower alpha
-                        beta = alpha; // Optional: can keep previous beta
+                        beta = alpha;
                         alpha = Math.Max(-INFINITY, bestScore - aspWindow);
-                        aspWindow = aspWindow + aspWindow / 2; // Increase window by 50%
+                        aspWindow = aspWindow + aspWindow / 2;
                         failCount++;
                     }
                     else if (bestScore >= beta)
                     {
-                        // Fail high - we need to search with higher beta
-                        alpha = beta; // Optional: can keep previous alpha  
+                        alpha = beta;
                         beta = Math.Min(INFINITY, bestScore + aspWindow);
-                        aspWindow = aspWindow + aspWindow / 2; // Increase window by 50%
+                        aspWindow = aspWindow + aspWindow / 2;
                         failCount++;
                     }
                     else
                     {
-                        // Search completed successfully within window
                         break;
                     }
 
-                    // Safety checks to prevent getting stuck
+                    // Safety checks
                     if (ShouldStopSearch())
                         break;
 
-                    // If we're taking too long or failing too much, use full window
                     var elapsedAtThisDepth = timeManager.ElapsedMs() - searchStartTime;
-                    var timeLimit = limits.MoveTime > 0 ? limits.MoveTime / 4 : 1000; // Default 1 second
+                    var timeLimit = limits.MoveTime > 0 ? limits.MoveTime / 4 : 1000;
 
                     if (failCount >= MAX_ASPIRATION_RETRIES || elapsedAtThisDepth > timeLimit)
                     {
-                        // Last resort: search with full window
                         if (alpha != -INFINITY || beta != INFINITY)
                         {
                             alpha = -INFINITY;
@@ -206,18 +204,15 @@ namespace Search
                         break;
                     }
 
-                    // Time management - be more careful about when to stop
                     if (timeManager.ShouldStop())
                     {
                         break;
                     }
 
-                    // Additional safety: if we've used more than 50% of our time, 
-                    // only continue if we have time for another iteration
                     if (depth >= 6 && timeManager.ElapsedMs() > timeManager.GetAllocatedTime() / 2)
                     {
                         var timePerDepth = timeManager.ElapsedMs() / depth;
-                        var estimatedNextDepthTime = timePerDepth * 2; // Exponential growth estimate
+                        var estimatedNextDepthTime = timePerDepth * 2;
 
                         if (timeManager.ElapsedMs() + estimatedNextDepthTime > timeManager.GetAllocatedTime())
                         {
@@ -252,7 +247,7 @@ namespace Search
                 NodesSearched++;
 
                 // Make move
-                var colorToMove = rootPosition.Turn;  // Save color BEFORE Play()
+                var colorToMove = rootPosition.Turn;
                 rootPosition.Play(colorToMove, rootMove.Move);
 
                 int score;
@@ -309,7 +304,7 @@ namespace Search
                 }
             }
 
-            // Move best move to front after the search loop
+            // Move best move to front
             if (bestMoveIndex > 0 && bestMoveIndex < rootMoves.Count)
             {
                 var bestMove = rootMoves[bestMoveIndex];
@@ -375,7 +370,6 @@ namespace Search
                     (entry.Flag == TTFlag.LowerBound && ttScore >= beta) ||
                     (entry.Flag == TTFlag.UpperBound && ttScore <= alpha))
                 {
-                    // Update killers/history from TT
                     if (ttScore >= beta && !ttMove.IsCapture)
                     {
                         UpdateKillers(ttMove, ply);
@@ -385,9 +379,9 @@ namespace Search
                 }
             }
 
-            // At leaf nodes, return static evaluation
+            // Drop into quiescence search at leaf nodes
             if (depth <= 0)
-                return Evaluate();
+                return Quiescence(alpha, beta, ply, 0);
 
             // Static evaluation
             var inCheck = rootPosition.InCheck(rootPosition.Turn);
@@ -400,7 +394,6 @@ namespace Search
             }
             else if (ttHit)
             {
-                // Use TT score as better approximation
                 staticEval = ttEntry.Value.Score;
                 staticEvalStack[ply] = staticEval;
             }
@@ -410,11 +403,11 @@ namespace Search
                 staticEvalStack[ply] = staticEval;
             }
 
-            // Improving - are we better than 2 plies ago?
+            // Improving
             bool improving = ply >= 2 && !inCheck &&
                            staticEval > staticEvalStack[ply - 2];
 
-            // Futility pruning
+            // Reverse futility pruning
             if (!pvNode && !inCheck && depth <= 8 &&
                 staticEval - 75 * depth >= beta &&
                 staticEval < MATE_VALUE - MAX_PLY)
@@ -438,7 +431,6 @@ namespace Search
 
                 if (nullScore >= beta)
                 {
-                    // Don't return mate scores from null move
                     if (nullScore >= MATE_VALUE - MAX_PLY)
                         nullScore = beta;
 
@@ -455,7 +447,7 @@ namespace Search
                     ttMove = ttEntry.Value.Move;
             }
 
-            // Generate moves using pre-allocated buffer
+            // Generate moves
             var moves = moveBuffers[ply];
             var moveCount = GenerateMovesInto(moves);
 
@@ -475,6 +467,13 @@ namespace Search
             {
                 var move = moves[i];
                 NodesSearched++;
+
+                // Futility pruning
+                if (!pvNode && !inCheck && !move.IsCapture && depth <= 8 && quietMovesSeen > 0)
+                {
+                    if (staticEval + 50 + 30 * depth <= alpha)
+                        continue;
+                }
 
                 // Late move pruning
                 if (!pvNode && !inCheck && quietMovesSeen > 0 && depth <= 8)
@@ -509,11 +508,9 @@ namespace Search
                     {
                         reduction = LogarithmicReduction(depth, movesSearched);
 
-                        // Reduce less for killers and winning captures
                         if (move == killerMoves[ply, 0] || move == killerMoves[ply, 1])
                             reduction--;
 
-                        // Increase reduction for non-improving positions
                         if (!improving)
                             reduction++;
 
@@ -551,7 +548,6 @@ namespace Search
 
                         if (score >= beta)
                         {
-                            // Update killers and history for beta cutoffs
                             if (!move.IsCapture)
                             {
                                 UpdateKillers(move, ply);
@@ -565,7 +561,7 @@ namespace Search
                 }
             }
 
-            // Store in transposition table only if search wasn't stopped
+            // Store in transposition table
             if (!stopSearch)
             {
                 var flag = bestScore >= beta ? TTFlag.LowerBound :
@@ -577,7 +573,242 @@ namespace Search
             return bestScore;
         }
 
-        // Helper methods (unchanged)
+        private int Quiescence(int alpha, int beta, int ply, int qDepth)
+        {
+            // Check stop flag
+            if (stopSearch)
+                return 0;
+
+            // Check time periodically
+            if ((QNodes & 2047) == 0 && ShouldStopSearch())
+                return 0;
+
+            QNodes++;
+            pvLength[ply] = ply;
+
+            // Update selective depth
+            if (ply > SelectiveDepth)
+                SelectiveDepth = ply;
+
+            // Terminal node checks
+            if (ply >= MAX_PLY)
+                return Evaluate();
+
+            // Check for draw
+            if (IsDrawByRepetition())
+                return DRAW_VALUE;
+
+            // Transposition table probe
+            var ttEntry = tt.Probe(rootPosition.GetHash());
+            var ttHit = ttEntry.HasValue;
+            var ttMove = ttEntry?.Move ?? new Move.Move();
+
+            if (ttHit && ttEntry.Value.Depth >= QSEARCH_DEPTH + qDepth)
+            {
+                var entry = ttEntry.Value;
+                var ttScore = ScoreFromTT(entry.Score, ply);
+
+                if (entry.Flag == TTFlag.Exact ||
+                    (entry.Flag == TTFlag.LowerBound && ttScore >= beta) ||
+                    (entry.Flag == TTFlag.UpperBound && ttScore <= alpha))
+                {
+                    return ttScore;
+                }
+            }
+
+            var inCheck = rootPosition.InCheck(rootPosition.Turn);
+            int staticEval;
+
+            // In check - must search all evasions
+            if (inCheck)
+            {
+                staticEval = -INFINITY;
+            }
+            else
+            {
+                // Stand pat - static evaluation as lower bound
+                staticEval = ttHit && ttEntry.Value.Score != -INFINITY ?
+                            ttEntry.Value.Score : Evaluate();
+
+                // Stand pat cutoff
+                if (staticEval >= beta)
+                    return staticEval;
+
+                // Update alpha (standing pat acts as a lower bound)
+                if (staticEval > alpha)
+                    alpha = staticEval;
+            }
+
+            // Generate moves
+            var moves = moveBuffers[ply];
+            var moveCount = inCheck ?
+                GenerateMovesInto(moves) :  // All moves when in check
+                GenerateCapturesInto(moves, false);  // Only captures when not in check
+
+            if (moveCount == 0)
+            {
+                return inCheck ? -MATE_VALUE + ply : staticEval;
+            }
+
+            // Order captures
+            moveCount = OrderCapturesInPlace(moves, moveCount, ply);
+
+            var bestScore = staticEval;
+            var bestMove = new Move.Move();
+
+            for (int i = 0; i < moveCount && !stopSearch; i++)
+            {
+                var move = moves[i];
+
+                // Delta pruning - skip obviously bad captures
+                if (!inCheck && staticEval < alpha - 200)
+                {
+                    var capturedValue = GetMaterialValue(rootPosition.At(move.To));
+
+                    // Add potential promotion value
+                    if ((move.Flags & MoveFlags.Promotions) != 0)
+                    {
+                        capturedValue += GetPromotionValue(move.Flags) - 100; // Pawn value
+                    }
+
+                    // Skip if capture can't raise alpha
+                    if (staticEval + capturedValue + 200 < alpha)
+                        continue;
+                }
+
+                // SEE pruning for non-pawn captures
+                if (!inCheck && move.IsCapture &&
+                    Types.TypeOf(rootPosition.At(move.From)) != PieceType.Pawn)
+                {
+                    if (!SEEGreaterOrEqual(move, 0))
+                        continue;
+                }
+
+                QNodes++;
+
+                // Make move
+                var colorToMove = rootPosition.Turn;
+                rootPosition.Play(colorToMove, move);
+
+                // Recursively search
+                var score = -Quiescence(-beta, -alpha, ply + 1, qDepth - 1);
+
+                // Unmake move
+                rootPosition.Undo(colorToMove, move);
+
+                if (stopSearch)
+                    break;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestMove = move;
+
+                    if (score > alpha)
+                    {
+                        alpha = score;
+                        UpdatePV(move, ply);
+
+                        if (score >= beta)
+                            break;
+                    }
+                }
+            }
+
+            // Store in TT
+            if (!stopSearch)
+            {
+                var flag = bestScore >= beta ? TTFlag.LowerBound :
+                          bestScore <= alpha ? TTFlag.UpperBound : TTFlag.Exact;
+
+                tt.Store(rootPosition.GetHash(), QSEARCH_DEPTH + qDepth,
+                        ScoreToTT(bestScore, ply), flag, bestMove);
+            }
+
+            return bestScore;
+        }
+
+        // Simple Static Exchange Evaluation
+        private bool SEEGreaterOrEqual(Move.Move move, int threshold)
+        {
+            var from = move.From;
+            var to = move.To;
+
+            // Get initial material balance
+            var capturedPiece = rootPosition.At(to);
+            var attackingPiece = rootPosition.At(from);
+
+            if (capturedPiece == Piece.NoPiece && move.Flags != MoveFlags.EnPassant)
+                return true; // Non-capture
+
+            var gain = GetMaterialValue(capturedPiece);
+
+            // Promotion bonus
+            if ((move.Flags & MoveFlags.Promotions) != 0)
+            {
+                gain += GetPromotionValue(move.Flags) - 100; // Subtract pawn value
+            }
+
+            // If we can't even beat threshold with the initial capture, fail
+            if (gain < threshold)
+                return false;
+
+            // Simple approximation: if captured piece is more valuable than attacker, it's good
+            var attackerValue = GetMaterialValue(attackingPiece);
+            if (gain >= attackerValue)
+                return true;
+
+            // More complex SEE would simulate the capture sequence here
+            // For now, use a simple heuristic
+            var balance = gain - attackerValue;
+
+            // Check if the destination square is defended
+            var occupancy = rootPosition.AllPieces(Color.White) | rootPosition.AllPieces(Color.Black);
+            occupancy &= ~(1UL << (int)from); // Remove attacker
+
+            var enemyColor = Types.ColorOf(attackingPiece).Flip();
+            var defenders = rootPosition.AttackersFrom(enemyColor, to, occupancy);
+
+            // If defended, assume we lose our piece
+            if (defenders != 0)
+            {
+                // Find least valuable defender
+                var minDefenderValue = 10000;
+                if ((defenders & rootPosition.BitboardOf(enemyColor, PieceType.Pawn)) != 0)
+                    minDefenderValue = 100;
+                else if ((defenders & rootPosition.BitboardOf(enemyColor, PieceType.Knight)) != 0)
+                    minDefenderValue = 320;
+                else if ((defenders & rootPosition.BitboardOf(enemyColor, PieceType.Bishop)) != 0)
+                    minDefenderValue = 330;
+                else if ((defenders & rootPosition.BitboardOf(enemyColor, PieceType.Rook)) != 0)
+                    minDefenderValue = 500;
+                else if ((defenders & rootPosition.BitboardOf(enemyColor, PieceType.Queen)) != 0)
+                    minDefenderValue = 900;
+
+                balance = balance - attackerValue + minDefenderValue;
+            }
+
+            return balance >= threshold;
+        }
+
+        private int GetMaterialValue(Piece piece)
+        {
+            if (piece == Piece.NoPiece)
+                return 0;
+
+            return Types.TypeOf(piece) switch
+            {
+                PieceType.Pawn => 100,
+                PieceType.Knight => 320,
+                PieceType.Bishop => 330,
+                PieceType.Rook => 500,
+                PieceType.Queen => 900,
+                PieceType.King => 10000,
+                _ => 0
+            };
+        }
+
+        // Helper methods
         private int LogarithmicReduction(int depth, int moveNumber)
         {
             return (int)(0.5 + Math.Log(depth) * Math.Log(moveNumber) / 2.0);
@@ -638,7 +869,7 @@ namespace Search
             };
         }
 
-        // Move generation helpers - now using pre-allocated arrays
+        // Move generation helpers
         private int GenerateMovesInto(Move.Move[] moveBuffer)
         {
             fixed (Move.Move* movesPtr = moveBuffer)
@@ -684,10 +915,9 @@ namespace Search
             return rootMoves;
         }
 
-        // Move ordering - in-place
+        // Move ordering
         private int OrderMovesInPlace(Move.Move[] moves, int moveCount, Move.Move ttMove, int ply, Move.Move prevMove = default)
         {
-            // Get counter move
             var counterMove = prevMove.From != prevMove.To ?
                 counterMoves[(int)prevMove.From, (int)prevMove.To] : new Move.Move();
 
@@ -719,7 +949,7 @@ namespace Search
             return pv;
         }
 
-        // Evaluation (simplified - should be in separate evaluator)
+        // Evaluation
         private int Evaluate()
         {
             return Evaluation.Evaluate(rootPosition);
@@ -766,7 +996,6 @@ namespace Search
         // Search control
         private bool ShouldStopSearch()
         {
-            // Check stop flag first
             if (stopSearch)
                 return true;
 
@@ -775,17 +1004,14 @@ namespace Search
 
         public void StopSearch()
         {
-            // Set the stop flag immediately
             stopSearch = true;
-
-            // Also tell the time manager to stop
             timeManager.ForceStop();
         }
 
         private void PrintSearchInfo(SearchResult result)
         {
             Console.WriteLine($"info depth {result.Depth} seldepth {SelectiveDepth} score cp {result.Score} " +
-                            $"nodes {result.Nodes} nps {result.Nodes * 1000 / (ulong)Math.Max(1, result.Time)} " +
+                            $"nodes {result.Nodes} qnodes {QNodes} nps {result.Nodes * 1000 / (ulong)Math.Max(1, result.Time)} " +
                             $"time {result.Time} hashfull {tt.HashFull()} pv {string.Join(" ", result.Pv)}");
             Console.Out.Flush();
         }
