@@ -1,7 +1,10 @@
-﻿using System;
+﻿using Move;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Move;
+using Test;
+using static System.Net.Mime.MediaTypeNames;
+using File = Move.File;
 
 namespace Search
 {
@@ -54,11 +57,11 @@ namespace Search
                         break;
 
                     case "stop":
-                        await HandleStop();  // Make it async
+                        await HandleStop();
                         break;
 
                     case "quit":
-                        await HandleStop();  // Make it async
+                        await HandleStop();
                         return;
 
                     case "d":
@@ -70,13 +73,17 @@ namespace Search
                         if (parts.Length > 1 && int.TryParse(parts[1], out int depth))
                             HandlePerft(depth);
                         break;
+
+                    case "bench":
+                        HandleBench();
+                        break;
                 }
             }
         }
 
         private void HandleUci()
         {
-            Console.WriteLine("id name CE3");
+            Console.WriteLine("id name GORB");
             Console.WriteLine("id author Assistant");
             Console.WriteLine("option name Hash type spin default 128 min 1 max 16384");
             Console.WriteLine("option name Threads type spin default 1 min 1 max 1");
@@ -125,6 +132,16 @@ namespace Search
 
         private async Task HandleGo(string[] parts)
         {
+            // Check if this is a perft command
+            if (parts.Length > 1 && parts[1] == "perft")
+            {
+                if (parts.Length > 2 && int.TryParse(parts[2], out int perftDepth))
+                {
+                    HandlePerft(perftDepth);
+                }
+                return;
+            }
+
             var limits = new SearchLimits();
             bool hasTimeControl = false;
 
@@ -137,7 +154,7 @@ namespace Search
                         {
                             limits.Depth = depth;
                             hasTimeControl = true;
-                            i++; // Skip next argument since we consumed it
+                            i++;
                         }
                         break;
 
@@ -146,7 +163,7 @@ namespace Search
                         {
                             limits.MoveTime = moveTime;
                             hasTimeControl = true;
-                            i++; // Skip next argument
+                            i++;
                         }
                         break;
 
@@ -156,7 +173,7 @@ namespace Search
                         {
                             limits.Time = wtime;
                             hasTimeControl = true;
-                            i++; // Skip next argument
+                            i++;
                         }
                         break;
 
@@ -166,7 +183,7 @@ namespace Search
                         {
                             limits.Time = btime;
                             hasTimeControl = true;
-                            i++; // Skip next argument
+                            i++;
                         }
                         break;
 
@@ -175,7 +192,7 @@ namespace Search
                             position.Turn == Color.White)
                         {
                             limits.Inc = winc;
-                            i++; // Skip next argument
+                            i++;
                         }
                         break;
 
@@ -184,7 +201,7 @@ namespace Search
                             position.Turn == Color.Black)
                         {
                             limits.Inc = binc;
-                            i++; // Skip next argument
+                            i++;
                         }
                         break;
 
@@ -192,7 +209,7 @@ namespace Search
                         if (i + 1 < parts.Length && int.TryParse(parts[i + 1], out int mtg))
                         {
                             limits.MovesToGo = mtg;
-                            i++; // Skip next argument
+                            i++;
                         }
                         break;
 
@@ -206,8 +223,8 @@ namespace Search
             // If no time control specified and not infinite, set reasonable defaults
             if (!hasTimeControl)
             {
-                limits.Depth = 12;  // Reasonable depth limit
-                limits.MoveTime = 5000;  // 5 seconds per move
+                limits.Depth = 12;
+                limits.MoveTime = 5000;
             }
 
             // Stop any ongoing search
@@ -276,18 +293,119 @@ namespace Search
 
         private Move.Move ParseMove(string moveStr)
         {
-            // TODO
+            if (moveStr.Length < 4)
+                return new Move.Move(); // Invalid move
+
+            var from = ParseSquare(moveStr.Substring(0, 2));
+            var to = ParseSquare(moveStr.Substring(2, 2));
+
+            if (from == Square.NoSquare || to == Square.NoSquare)
+                return new Move.Move(); // Invalid move
+
+            // Check for promotion
+            if (moveStr.Length == 5)
+            {
+                var promoPiece = moveStr[4];
+                var flags = MoveFlags.Quiet;
+
+                // Check if it's a capture by looking at the current position
+                if (position.At(to) != Piece.NoPiece)
+                {
+                    // Promotion capture
+                    switch (promoPiece)
+                    {
+                        case 'q': flags = MoveFlags.PcQueen; break;
+                        case 'r': flags = MoveFlags.PcRook; break;
+                        case 'b': flags = MoveFlags.PcBishop; break;
+                        case 'n': flags = MoveFlags.PcKnight; break;
+                        default: return new Move.Move(); // Invalid promotion
+                    }
+                }
+                else
+                {
+                    // Quiet promotion
+                    switch (promoPiece)
+                    {
+                        case 'q': flags = MoveFlags.PrQueen; break;
+                        case 'r': flags = MoveFlags.PrRook; break;
+                        case 'b': flags = MoveFlags.PrBishop; break;
+                        case 'n': flags = MoveFlags.PrKnight; break;
+                        default: return new Move.Move(); // Invalid promotion
+                    }
+                }
+
+                return new Move.Move(from, to, flags);
+            }
+
+            // Generate all legal moves to find the correct move with proper flags
+            var moves = new Move.Move[256];
+            var moveCount = GenerateMovesForPosition(moves);
+
+            // Find the matching move
+            for (int i = 0; i < moveCount; i++)
+            {
+                if (moves[i].From == from && moves[i].To == to)
+                {
+                    return moves[i];
+                }
+            }
+
+            // If no matching legal move found, create a basic move
+            // This shouldn't happen with valid UCI input
+            return new Move.Move(from, to);
+        }
+
+        private unsafe int GenerateMovesForPosition(Move.Move[] moveBuffer)
+        {
+            fixed (Move.Move* movesPtr = moveBuffer)
+            {
+                if (position.Turn == Color.White)
+                    return position.GenerateLegalsInto<White>(movesPtr);
+                else
+                    return position.GenerateLegalsInto<Black>(movesPtr);
+            }
         }
 
         private Square ParseSquare(string sq)
         {
-            // TODO
+            if (sq.Length != 2)
+                return Square.NoSquare;
+
+            var file = sq[0] - 'a';
+            var rank = sq[1] - '1';
+
+            if (file < 0 || file > 7 || rank < 0 || rank > 7)
+                return Square.NoSquare;
+
+            return Types.CreateSquare((File)file, (Rank)rank);
         }
 
         private void HandlePerft(int depth)
         {
-            // TODO
+            var fen = position.Fen();
+            Console.WriteLine($"Running perft depth {depth} on position:");
+            Console.WriteLine($"FEN: {fen}");
+            Console.WriteLine();
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var result = Test.Perft.RunSingle(position, (uint)depth);
+            sw.Stop();
+
+            Console.WriteLine($"Nodes searched: {result:N0}");
+            Console.WriteLine($"Time: {sw.ElapsedMilliseconds}ms");
+
+            if (sw.ElapsedMilliseconds > 0)
+            {
+                var nps = result * 1000 / (ulong)sw.ElapsedMilliseconds;
+                Console.WriteLine($"Nodes/second: {nps:N0}");
+            }
         }
 
+        private void HandleBench()
+        {
+            Console.WriteLine("Running benchmark suite...");
+            Console.WriteLine();
+            Perft.RunBenchmark();
+        }
     }
 }
