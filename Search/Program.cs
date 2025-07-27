@@ -86,33 +86,7 @@ class Program
         Console.WriteLine($"Depth reached: {result.Depth}");
         Console.WriteLine($"Nodes searched: {result.Nodes:N0}");
         Console.WriteLine($"Nodes per second: {(int)(result.Nodes / elapsed):N0}");
-
-        // Perft test
-        Console.WriteLine("\n\nRunning perft test (depth 5):");
-        var perftResult = RunPerft(position, 5);
-        Console.WriteLine($"Perft(5) = {perftResult:N0} nodes");
     }
 
-    static ulong RunPerft(Position pos, int depth)
-    {
-        if (depth == 0)
-            return 1;
-
-        ulong nodes = 0;
-        var moves = pos.Turn == Color.White ?
-            pos.GenerateLegals<White>() :
-            pos.GenerateLegals<Black>();
-
-        if (depth == 1)
-            return (ulong)moves.Length;
-
-        foreach (var move in moves)
-        {
-            pos.Play(pos.Turn, move);
-            nodes += RunPerft(pos, depth - 1);
-            pos.Undo(pos.Turn.Flip(), move);
-        }
-
-        return nodes;
-    }
+    
 }

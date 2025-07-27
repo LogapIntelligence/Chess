@@ -276,98 +276,18 @@ namespace Search
 
         private Move.Move ParseMove(string moveStr)
         {
-            if (moveStr.Length < 4)
-                return new Move.Move();
-
-            var from = ParseSquare(moveStr.Substring(0, 2));
-            var to = ParseSquare(moveStr.Substring(2, 2));
-
-            // Check for promotion
-            MoveFlags flags = MoveFlags.Quiet;
-            if (moveStr.Length > 4)
-            {
-                var promo = char.ToLower(moveStr[4]);
-                flags = promo switch
-                {
-                    'n' => MoveFlags.PrKnight,
-                    'b' => MoveFlags.PrBishop,
-                    'r' => MoveFlags.PrRook,
-                    'q' => MoveFlags.PrQueen,
-                    _ => MoveFlags.Quiet
-                };
-            }
-
-            // Generate legal moves to find the correct move type
-            var moves = position.Turn == Color.White ?
-                position.GenerateLegals<White>() :
-                position.GenerateLegals<Black>();
-
-            foreach (var move in moves)
-            {
-                if (move.From == from && move.To == to)
-                {
-                    if (flags != MoveFlags.Quiet && (move.Flags & MoveFlags.Promotions) != 0)
-                    {
-                        // Promotion move with specific piece
-                        if ((flags == MoveFlags.PrKnight && (move.Flags == MoveFlags.PrKnight || move.Flags == MoveFlags.PcKnight)) ||
-                            (flags == MoveFlags.PrBishop && (move.Flags == MoveFlags.PrBishop || move.Flags == MoveFlags.PcBishop)) ||
-                            (flags == MoveFlags.PrRook && (move.Flags == MoveFlags.PrRook || move.Flags == MoveFlags.PcRook)) ||
-                            (flags == MoveFlags.PrQueen && (move.Flags == MoveFlags.PrQueen || move.Flags == MoveFlags.PcQueen)))
-                        {
-                            return move;
-                        }
-                    }
-                    else
-                    {
-                        return move;
-                    }
-                }
-            }
-
-            return new Move.Move(from, to, flags);
+            // TODO
         }
 
         private Square ParseSquare(string sq)
         {
-            if (sq.Length != 2)
-                return Square.NoSquare;
-
-            var file = (Move.File)(sq[0] - 'a');
-            var rank = (Rank)(sq[1] - '1');
-
-            return Types.CreateSquare(file, rank);
+            // TODO
         }
 
         private void HandlePerft(int depth)
         {
-            var startTime = DateTime.Now;
-            var nodes = Perft(position, depth);
-            var elapsed = (DateTime.Now - startTime).TotalSeconds;
-
-            Console.WriteLine($"Nodes: {nodes}");
-            Console.WriteLine($"Time: {elapsed:F2}s");
-            Console.WriteLine($"NPS: {(int)(nodes / elapsed)}");
+            // TODO
         }
 
-        private ulong Perft(Position pos, int depth)
-        {
-            if (depth == 0)
-                return 1;
-
-            ulong nodes = 0;
-            var moves = pos.Turn == Color.White ?
-                pos.GenerateLegals<White>() :
-                pos.GenerateLegals<Black>();
-
-            foreach (var move in moves)
-            {
-                var colorToMove = pos.Turn;
-                pos.Play(colorToMove, move);
-                nodes += Perft(pos, depth - 1);
-                pos.Undo(colorToMove, move);
-            }
-
-            return nodes;
-        }
     }
 }
