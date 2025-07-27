@@ -28,7 +28,7 @@ namespace Search
             if (limits.MoveTime > 0)
             {
                 // Fixed time per move
-                allocatedTime = limits.MoveTime - 50; // 50ms safety margin
+                allocatedTime = limits.MoveTime; // 50ms safety margin
                 maxTime = limits.MoveTime;
             }
             else if (limits.Time > 0 && !infinite)  // Don't set time limits for infinite

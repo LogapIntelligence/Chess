@@ -1,8 +1,701 @@
 ﻿@{
-    ViewData["Title"] = "Home Page";
+    ViewData["Title"] = "UCI Chess Interface";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+<div class="container mx-auto px-4 py-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Chess Board Section -->
+        <div class="lg:col-span-2 space-y-6">
+            <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                <div class="bg-gray-800 text-white px-6 py-4">
+                    <h4 class="text-xl font-semibold">Chess Board</h4>
+                </div>
+                <div class="p-6">
+                    <div id="chessboard" style="width: 100%; max-width: 500px; margin: 0 auto;"></div>
+                    <div class="mt-6 flex flex-wrap justify-center gap-3">
+                        <button id="flipBoard" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
+                            Flip Board
+                        </button>
+                        <button id="newGame" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            New Game
+                        </button>
+                        <button id="undoMove" class="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors">
+                            Undo Move
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Evaluation Bar -->
+            <div class="bg-white rounded-lg shadow-lg p-4">
+                <div class="mb-2 flex justify-between items-center">
+                    <span class="text-sm font-medium text-gray-600">Evaluation</span>
+                    <span id="evalScore" class="text-lg font-bold text-gray-800">0.00</span>
+                </div>
+                <div class="relative h-8 bg-gray-900 rounded-lg overflow-hidden">
+                    <div id="evalBar" class="absolute left-0 top-0 h-full bg-white transition-all duration-300" style="width: 50%"></div>
+                    <div class="absolute inset-0 flex items-center justify-center">
+                        <span id="evalText" class="text-sm font-medium text-gray-400 z-10"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Game Status -->
+            <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                <div class="bg-gray-100 px-6 py-3 border-b">
+                    <h5 class="text-lg font-semibold text-gray-800">Game Status</h5>
+                </div>
+                <div class="p-6 space-y-3">
+                    <div class="flex items-center">
+                        <span class="font-semibold text-gray-700 w-24">Turn:</span>
+                        <span id="gameStatus" class="text-gray-900">White to move</span>
+                    </div>
+                    <div>
+                        <span class="font-semibold text-gray-700">FEN:</span>
+                        <div id="currentFen" class="mt-1 p-2 bg-gray-100 rounded font-mono text-sm text-gray-800 break-all"></div>
+                    </div>
+                    <div>
+                        <span class="font-semibold text-gray-700">Move History:</span>
+                        <div id="moveHistory" class="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg h-32 overflow-y-auto font-mono text-sm"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Engine Control Section -->
+        <div class="space-y-6">
+            <!-- Engine Control -->
+            <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                <div class="bg-gray-800 text-white px-6 py-4">
+                    <h5 class="text-lg font-semibold">Engine Control</h5>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label for="enginePath" class="block text-sm font-medium text-gray-700 mb-2">Engine Path:</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="enginePath" 
+                                   value="C:\Users\logap\source\repos\Chess\Search\bin\Release\net9.0\publish\Search.exe"
+                                   class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                                   placeholder="C:\path\to\engine.exe">
+                            <button id="loadEngine" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                                Load
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center gap-3">
+                        <button id="unloadEngine" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                            Unload
+                        </button>
+                        <span id="engineStatus" class="px-3 py-1 bg-gray-500 text-white text-sm rounded-full">Not Loaded</span>
+                    </div>
+
+                    <div class="border-t pt-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="infiniteAnalysisToggle" class="sr-only peer" disabled>
+                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                <span class="ml-3 text-sm font-medium text-gray-700">Infinite Analysis</span>
+                            </label>
+                            <button id="stopAnalysis" class="px-3 py-1 bg-yellow-600 text-white text-sm rounded-lg hover:bg-yellow-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                                Stop
+                            </button>
+                        </div>
+                        
+                        <button id="engineMove" class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                            Get Engine Move (Spacebar)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Engine Analysis Display -->
+            <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                <div class="bg-gray-100 px-6 py-3 border-b">
+                    <h5 class="text-lg font-semibold text-gray-800">Engine Analysis</h5>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <div class="text-xs text-gray-600 uppercase tracking-wide">Eval</div>
+                            <div id="evaluation" class="text-xl font-bold text-gray-900 mt-1">--</div>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <div class="text-xs text-gray-600 uppercase tracking-wide">Depth</div>
+                            <div id="depth" class="text-xl font-bold text-gray-900 mt-1">--</div>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <div class="text-xs text-gray-600 uppercase tracking-wide">Nodes</div>
+                            <div id="nodes" class="text-xl font-bold text-gray-900 mt-1">--</div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="text-sm font-medium text-gray-700 mb-2">Principal Variation:</div>
+                        <div id="principalVariation" class="p-3 bg-gray-50 border border-gray-200 rounded-lg h-20 overflow-y-auto font-mono text-sm text-gray-800"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Engine Output -->
+            <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                <div class="bg-gray-100 px-6 py-3 border-b">
+                    <h5 class="text-lg font-semibold text-gray-800">Engine Output</h5>
+                </div>
+                <div class="p-6">
+                    <div id="engineOutput" class="p-3 bg-gray-900 text-green-400 rounded-lg h-48 overflow-y-auto font-mono text-xs mb-3"></div>
+                    <div class="flex gap-2">
+                        <input type="text" id="manualCommand" 
+                               class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                               placeholder="Enter UCI command">
+                        <button id="sendCommand" class="px-4 py-2 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                            Send
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
+
+@section Scripts {
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+
+    <style>
+        /* CSS for highlighting moves */
+        .highlight-square {
+            box-shadow: inset 0 0 0 4px rgba(34, 197, 94, 0.7);
+        }
+        
+        /* Make chessboard responsive */
+        #chessboard {
+            aspect-ratio: 1;
+        }
+        
+        /* Custom scrollbar for dark theme output */
+        #engineOutput::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        #engineOutput::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+        
+        #engineOutput::-webkit-scrollbar-thumb {
+            background: #4a4a4a;
+            border-radius: 4px;
+        }
+    </style>
+
+    <script>
+        // Chess game and board setup
+        let game = new Chess();
+        let board = null;
+        let connection = null;
+        let engineLoaded = false;
+        let isAnalyzing = false;
+        let bestMoveHighlight = {
+            source: null,
+            target: null
+        };
+
+        // Initialize SignalR connection
+        connection = new signalR.HubConnectionBuilder()
+            .withUrl("/chesshub")
+            .build();
+
+        // Start SignalR connection
+        connection.start().then(function () {
+            console.log("SignalR Connected");
+            updateConnectionStatus(true);
+        }).catch(function (err) {
+            console.error("SignalR Connection Error: ", err);
+            updateConnectionStatus(false);
+        });
+
+        // SignalR event handlers
+        connection.on("Connected", function (connectionId) {
+            console.log("Connected with ID: " + connectionId);
+        });
+
+        connection.on("EngineLoaded", function (message) {
+            engineLoaded = true;
+            updateEngineStatus("Loaded", "bg-green-500");
+            document.getElementById('unloadEngine').disabled = false;
+            document.getElementById('infiniteAnalysisToggle').disabled = false;
+            document.getElementById('stopAnalysis').disabled = false;
+            document.getElementById('engineMove').disabled = false;
+            document.getElementById('sendCommand').disabled = false;
+            addToEngineOutput(message);
+        });
+
+        connection.on("EngineUnloaded", function (message) {
+            engineLoaded = false;
+            isAnalyzing = false;
+            document.getElementById('infiniteAnalysisToggle').checked = false;
+            updateEngineStatus("Not Loaded", "bg-gray-500");
+            document.getElementById('unloadEngine').disabled = true;
+            document.getElementById('infiniteAnalysisToggle').disabled = true;
+            document.getElementById('stopAnalysis').disabled = true;
+            document.getElementById('engineMove').disabled = true;
+            document.getElementById('sendCommand').disabled = true;
+            addToEngineOutput(message);
+            clearHighlights();
+        });
+
+        connection.on("EngineStatus", function (status) {
+            engineLoaded = status === "loaded";
+            updateEngineStatus(status === "loaded" ? "Loaded" : "Not Loaded",
+                                 status === "loaded" ? "bg-green-500" : "bg-gray-500");
+        });
+
+        connection.on("EngineOutput", function (output) {
+            addToEngineOutput(output);
+        });
+
+        connection.on("EngineError", function (error) {
+            addToEngineOutput("ERROR: " + error, true);
+            isAnalyzing = false;
+            document.getElementById('infiniteAnalysisToggle').checked = false;
+        });
+
+        connection.on("EngineEvaluation", function (evalData) {
+            document.getElementById('evaluation').textContent = evalData.evaluation || '--';
+            document.getElementById('depth').textContent = evalData.depth || '--';
+            document.getElementById('nodes').textContent = formatNodes(evalData.nodes) || '--';
+            document.getElementById('principalVariation').textContent = evalData.principalVariation || '';
+
+            // Update evaluation bar
+            updateEvaluationBar(evalData.evaluation);
+
+            // Highlight best move from PV
+            if (evalData.principalVariation) {
+                const pvMoves = evalData.principalVariation.split(' ');
+                if (pvMoves.length > 0) {
+                    const move = pvMoves[0];
+                    // Parse UCI move format
+                    if (move.length >= 4) {
+                        const from = move.substring(0, 2);
+                        const to = move.substring(2, 4);
+                        highlightMove(from, to);
+                    }
+                } else {
+                    clearHighlights();
+                }
+            } else {
+                clearHighlights();
+            }
+        });
+
+        connection.on("EngineBestMove", function (bestMove) {
+            addToEngineOutput("Engine suggests: " + bestMove);
+            // Force board update after engine move
+            setTimeout(() => {
+                makeMove(bestMove);
+                // Re-enable infinite analysis if it was on
+                if (document.getElementById('infiniteAnalysisToggle').checked) {
+                    startInfiniteAnalysis();
+                }
+            }, 100);
+        });
+
+        connection.on("GameReset", function () {
+            game.reset();
+            board.position(game.fen());
+            updateGameStatus();
+            document.getElementById('moveHistory').innerHTML = '';
+            document.getElementById('evaluation').textContent = '--';
+            document.getElementById('depth').textContent = '--';
+            document.getElementById('nodes').textContent = '--';
+            document.getElementById('principalVariation').textContent = '';
+            updateEvaluationBar(null);
+            clearHighlights();
+            isAnalyzing = false;
+            document.getElementById('infiniteAnalysisToggle').checked = false;
+            if (engineLoaded) {
+                connection.invoke("StopAnalysis");
+            }
+        });
+
+        connection.on("Error", function (error) {
+            alert("Error: " + error);
+        });
+
+        // Chess board configuration
+        const boardConfig = {
+            draggable: true,
+            position: 'start',
+            onDragStart: onDragStart,
+            onDrop: onDrop,
+            onSnapEnd: onSnapEnd,
+            pieceTheme: '/Chess_Pieces/{piece}.svg'
+        };
+
+        // Initialize board
+        board = Chessboard('chessboard', boardConfig);
+        
+        // Make board responsive
+        window.addEventListener('resize', board.resize);
+
+        // Board event handlers
+        function onDragStart(source, piece, position, orientation) {
+            if (game.game_over()) return false;
+
+            if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
+                (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
+                return false;
+            }
+            clearHighlights();
+        }
+
+        function onDrop(source, target) {
+            const move = game.move({
+                from: source,
+                to: target,
+                promotion: 'q'
+            });
+
+            if (move === null) return 'snapback';
+
+            updateGameStatus();
+            updateMoveHistory();
+            clearHighlights();
+
+            if (engineLoaded) {
+                connection.invoke("SetPosition", game.fen());
+                if (document.getElementById('infiniteAnalysisToggle').checked) {
+                    startInfiniteAnalysis();
+                } else {
+                    connection.invoke("StopAnalysis");
+                }
+            }
+            stopInfiniteAnalysis();
+                connection.invoke("SendCommand", "go movetime 3000");
+        }
+
+        function onSnapEnd() {
+            board.position(game.fen());
+        }
+
+        // Game functions
+        function updateGameStatus() {
+            let status = '';
+            let moveColor = game.turn() === 'b' ? 'Black' : 'White';
+
+            if (game.in_checkmate()) {
+                status = 'Game over, ' + moveColor + ' is in checkmate.';
+            } else if (game.in_draw()) {
+                status = 'Game over, drawn position';
+            } else {
+                status = moveColor + ' to move';
+                if (game.in_check()) {
+                    status += ', ' + moveColor + ' is in check';
+                }
+            }
+
+            document.getElementById('gameStatus').textContent = status;
+            document.getElementById('currentFen').textContent = game.fen();
+        }
+
+        function updateMoveHistory() {
+            const history = game.history();
+            let historyHtml = '';
+
+            for (let i = 0; i < history.length; i++) {
+                if (i % 2 === 0) {
+                    historyHtml += '<div>' + (Math.floor(i / 2) + 1) + '. ';
+                }
+                historyHtml += history[i] + ' ';
+                if (i % 2 === 1) {
+                    historyHtml += '</div>';
+                }
+            }
+
+            if (history.length % 2 === 1) {
+                historyHtml += '</div>';
+            }
+
+            document.getElementById('moveHistory').innerHTML = historyHtml;
+            document.getElementById('moveHistory').scrollTop = document.getElementById('moveHistory').scrollHeight;
+        }
+
+        function updateEngineStatus(status, badgeClass) {
+            const statusElement = document.getElementById('engineStatus');
+            statusElement.textContent = status;
+            statusElement.className = 'px-3 py-1 text-white text-sm rounded-full ' + badgeClass;
+        }
+
+        function updateConnectionStatus(connected) {
+            console.log("SignalR Connection Status: " + (connected ? "Connected" : "Disconnected"));
+        }
+
+        function addToEngineOutput(text, isError = false) {
+            const outputDiv = document.getElementById('engineOutput');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = isError ? 'text-red-400' : 'text-green-400';
+            outputDiv.innerHTML += `<div class="${className}">[${timestamp}] ${text}</div>`;
+            outputDiv.scrollTop = outputDiv.scrollHeight;
+        }
+
+        function makeMove(moveString) {
+            const move = game.move(moveString, { sloppy: true });
+            if (move) {
+                // Ensure visual update
+                board.position(game.fen(), true);
+                updateGameStatus();
+                updateMoveHistory();
+                clearHighlights();
+                // todo
+
+                if (engineLoaded) {
+                    connection.invoke("SetPosition", game.fen());
+                }
+            } else {
+                addToEngineOutput("Invalid engine move attempted: " + moveString, true);
+            }
+        }
+
+        // Move highlighting functions
+        function highlightMove(source, target) {
+            clearHighlights();
+
+            $('#chessboard .square-' + source).addClass('highlight-square');
+            $('#chessboard .square-' + target).addClass('highlight-square');
+
+            bestMoveHighlight.source = source;
+            bestMoveHighlight.target = target;
+        }
+
+        function clearHighlights() {
+            if (bestMoveHighlight.source) {
+                $('#chessboard .square-' + bestMoveHighlight.source).removeClass('highlight-square');
+                $('#chessboard .square-' + bestMoveHighlight.target).removeClass('highlight-square');
+                bestMoveHighlight.source = null;
+                bestMoveHighlight.target = null;
+            }
+        }
+
+        // Evaluation bar functions
+        function updateEvaluationBar(evaluation) {
+            if (!evaluation || evaluation === '--') {
+                document.getElementById('evalBar').style.width = '50%';
+                document.getElementById('evalScore').textContent = '0.00';
+                document.getElementById('evalText').textContent = '';
+                return;
+            }
+
+            let score = 0;
+            let displayScore = evaluation;
+
+            // Parse evaluation
+            if (evaluation.startsWith('#')) {
+                // Mate evaluation
+                const mateIn = parseInt(evaluation.substring(1));
+                score = mateIn > 0 ? 10 : -10;
+                displayScore = `M${Math.abs(mateIn)}`;
+            } else {
+                // Centipawn evaluation
+                score = parseFloat(evaluation);
+                displayScore = (score >= 0 ? '+' : '') + score.toFixed(2);
+            }
+
+            // Update score display
+            document.getElementById('evalScore').textContent = displayScore;
+
+            // Calculate bar width (sigmoid function for smooth scaling)
+            const barPercentage = 50 + (50 * Math.tanh(score / 400));
+            document.getElementById('evalBar').style.width = barPercentage + '%';
+
+            // Update bar text
+            if (Math.abs(score) > 3) {
+                document.getElementById('evalText').textContent = score > 0 ? 'White winning' : 'Black winning';
+            } else if (Math.abs(score) > 1) {
+                document.getElementById('evalText').textContent = score > 0 ? 'White better' : 'Black better';
+            } else {
+                document.getElementById('evalText').textContent = 'Equal';
+            }
+        }
+
+        function formatNodes(nodes) {
+            if (!nodes || nodes === '--') return '--';
+            const num = parseInt(nodes);
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(1) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(1) + 'K';
+            }
+            return num.toString();
+        }
+
+        function startInfiniteAnalysis() {
+            if (engineLoaded && !isAnalyzing) {
+                connection.invoke("StartAnalysis");
+                isAnalyzing = true;
+                addToEngineOutput("Infinite analysis started.");
+            }
+        }
+
+        function stopInfiniteAnalysis() {
+            if (engineLoaded && isAnalyzing) {
+                connection.invoke("StopAnalysis");
+                isAnalyzing = false;
+                addToEngineOutput("Infinite analysis stopped.");
+                clearHighlights();
+                document.getElementById('evaluation').textContent = '--';
+                document.getElementById('depth').textContent = '--';
+                document.getElementById('nodes').textContent = '--';
+                document.getElementById('principalVariation').textContent = '';
+                updateEvaluationBar(null);
+            }
+        }
+
+        // Button and Toggle event handlers
+        document.getElementById('flipBoard').addEventListener('click', function() {
+            board.flip();
+        });
+
+        document.getElementById('newGame').addEventListener('click', function() {
+            if (engineLoaded) {
+                connection.invoke("NewGame");
+            } else {
+                game.reset();
+                board.position(game.fen());
+                updateGameStatus();
+                document.getElementById('moveHistory').innerHTML = '';
+                document.getElementById('evaluation').textContent = '--';
+                document.getElementById('depth').textContent = '--';
+                document.getElementById('nodes').textContent = '--';
+                document.getElementById('principalVariation').textContent = '';
+                updateEvaluationBar(null);
+                clearHighlights();
+            }
+            isAnalyzing = false;
+            document.getElementById('infiniteAnalysisToggle').checked = false;
+        });
+
+        document.getElementById('undoMove').addEventListener('click', function() {
+            game.undo();
+            board.position(game.fen());
+            updateGameStatus();
+            updateMoveHistory();
+            clearHighlights();
+
+            if (engineLoaded) {
+                connection.invoke("SetPosition", game.fen());
+                if (document.getElementById('infiniteAnalysisToggle').checked) {
+                    startInfiniteAnalysis();
+                } else {
+                    connection.invoke("StopAnalysis");
+                }
+            }
+        });
+
+        document.getElementById('loadEngine').addEventListener('click', function() {
+            const enginePath = document.getElementById('enginePath').value.trim();
+            if (!enginePath) {
+                alert('Please enter engine path');
+                return;
+            }
+
+            fetch('/Home/LoadEngine', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(enginePath)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    alert('Failed to load engine: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error loading engine');
+            });
+        });
+
+        document.getElementById('unloadEngine').addEventListener('click', function() {
+            fetch('/Home/UnloadEngine', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    alert('Failed to unload engine: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error unloading engine');
+            });
+        });
+
+        document.getElementById('infiniteAnalysisToggle').addEventListener('change', function() {
+            if (!engineLoaded) {
+                this.checked = false;
+                alert("Please load an engine first to start analysis.");
+                return;
+            }
+
+            if (this.checked) {
+                startInfiniteAnalysis();
+            } else {
+                stopInfiniteAnalysis();
+            }
+        });
+
+        document.getElementById('stopAnalysis').addEventListener('click', function() {
+            document.getElementById('infiniteAnalysisToggle').checked = false;
+            stopInfiniteAnalysis();
+        });
+
+        document.getElementById('engineMove').addEventListener('click', function() {
+            if (engineLoaded) {
+                stopInfiniteAnalysis();
+                connection.invoke("SendCommand", "go movetime 3000");
+            }
+        });
+
+        document.getElementById('sendCommand').addEventListener('click', function() {
+            const command = document.getElementById('manualCommand').value.trim();
+            if (command && engineLoaded) {
+                if (isAnalyzing) {
+                    stopInfiniteAnalysis();
+                    document.getElementById('infiniteAnalysisToggle').checked = false;
+                }
+                connection.invoke("SendCommand", command);
+                document.getElementById('manualCommand').value = '';
+            }
+        });
+
+        document.getElementById('manualCommand').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                document.getElementById('sendCommand').click();
+            }
+        });
+
+        // Keyboard event listener for Spacebar
+        document.addEventListener('keydown', function(event) {
+            if (event.code === 'Space' && engineLoaded && !game.game_over()) {
+                event.preventDefault();
+
+                stopInfiniteAnalysis();
+                document.getElementById('infiniteAnalysisToggle').checked = false;
+
+                addToEngineOutput("Requesting engine move...", false);
+                connection.invoke("SendCommand", "go movetime 3000");
+            }
+        });
+
+        // Initial setup
+        updateGameStatus();
+        document.getElementById('infiniteAnalysisToggle').disabled = !engineLoaded;
+        document.getElementById('stopAnalysis').disabled = true;
+    </script>
+}
