@@ -15,6 +15,7 @@ namespace Search
         private Task? searchTask;
         private CancellationTokenSource? searchCancellation;
         private readonly object positionLock = new object();
+        private volatile bool isSearching = false;
 
         public UCI()
         {
@@ -32,55 +33,63 @@ namespace Search
             string? line;
             while ((line = Console.ReadLine()) != null)
             {
-                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length == 0) continue;
-
-                switch (parts[0])
+                try
                 {
-                    case "uci":
-                        HandleUci();
-                        break;
+                    var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 0) continue;
 
-                    case "isready":
-                        SendCommand("readyok");
-                        break;
+                    switch (parts[0])
+                    {
+                        case "uci":
+                            HandleUci();
+                            break;
 
-                    case "ucinewgame":
-                        await HandleNewGame();
-                        break;
+                        case "isready":
+                            SendCommand("readyok");
+                            break;
 
-                    case "position":
-                        await HandlePosition(parts);
-                        break;
+                        case "ucinewgame":
+                            await HandleNewGame();
+                            break;
 
-                    case "go":
-                        _ = HandleGo(parts);
-                        break;
+                        case "position":
+                            await HandlePosition(parts);
+                            break;
 
-                    case "stop":
-                        await HandleStop();
-                        break;
+                        case "go":
+                            await HandleGo(parts);
+                            break;
 
-                    case "quit":
-                        await HandleStop();
-                        return;
+                        case "stop":
+                            await HandleStop();
+                            break;
 
-                    case "d":
-                    case "display":
-                        lock (positionLock)
-                        {
-                            Console.WriteLine(position);
-                        }
-                        break;
+                        case "quit":
+                            await HandleStop();
+                            return;
 
-                    case "perft":
-                        if (parts.Length > 1 && int.TryParse(parts[1], out int depth))
-                            HandlePerft(depth);
-                        break;
+                        case "d":
+                        case "display":
+                            lock (positionLock)
+                            {
+                                Console.WriteLine(position);
+                            }
+                            break;
 
-                    case "bench":
-                        HandleBench();
-                        break;
+                        case "perft":
+                            if (parts.Length > 1 && int.TryParse(parts[1], out int depth))
+                                HandlePerft(depth);
+                            break;
+
+                        case "bench":
+                            HandleBench();
+                            break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"UCI Command Error: {ex.Message}");
+                    // Continue processing other commands
                 }
             }
         }
@@ -108,40 +117,59 @@ namespace Search
 
         private async Task HandlePosition(string[] parts)
         {
-            // CRITICAL: Stop any ongoing search before updating position
-            await HandleStop();
+            // CRITICAL: Always stop search before position updates
+            if (isSearching)
+            {
+                await HandleStop();
+            }
 
             lock (positionLock)
             {
-                var movesIndex = Array.IndexOf(parts, "moves");
-
-                if (parts.Length > 1 && parts[1] == "startpos")
+                try
                 {
-                    position = new Position();
-                    Position.Set(Types.DEFAULT_FEN, position);
-                }
-                else if (parts.Length > 1 && parts[1] == "fen")
-                {
-                    // Reconstruct FEN string
-                    var fenParts = new string[movesIndex > 0 ? movesIndex - 2 : parts.Length - 2];
-                    Array.Copy(parts, 2, fenParts, 0, fenParts.Length);
-                    var fen = string.Join(" ", fenParts);
+                    var movesIndex = Array.IndexOf(parts, "moves");
 
-                    position = new Position();
-                    Position.Set(fen, position);
-                }
-
-                // Apply moves
-                if (movesIndex > 0)
-                {
-                    for (int i = movesIndex + 1; i < parts.Length; i++)
+                    if (parts.Length > 1 && parts[1] == "startpos")
                     {
-                        var move = ParseMove(parts[i]);
-                        if (move.From != move.To)
+                        position = new Position();
+                        Position.Set(Types.DEFAULT_FEN, position);
+                    }
+                    else if (parts.Length > 1 && parts[1] == "fen")
+                    {
+                        // Reconstruct FEN string - be more careful about bounds
+                        var fenEndIndex = movesIndex > 0 ? movesIndex : parts.Length;
+                        var fenParts = new string[fenEndIndex - 2];
+                        Array.Copy(parts, 2, fenParts, 0, fenParts.Length);
+                        var fen = string.Join(" ", fenParts);
+
+                        position = new Position();
+                        Position.Set(fen, position);
+                    }
+
+                    // Apply moves
+                    if (movesIndex > 0 && movesIndex + 1 < parts.Length)
+                    {
+                        for (int i = movesIndex + 1; i < parts.Length; i++)
                         {
-                            position.Play(position.Turn, move);
+                            var move = ParseMove(parts[i]);
+                            if (move.From != move.To)
+                            {
+                                position.Play(position.Turn, move);
+                            }
+                            else
+                            {
+                                Console.Error.WriteLine($"Invalid move: {parts[i]}");
+                                break;
+                            }
                         }
                     }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Position parsing error: {ex.Message}");
+                    // Reset to default position on error
+                    position = new Position();
+                    Position.Set(Types.DEFAULT_FEN, position);
                 }
             }
         }
@@ -164,6 +192,60 @@ namespace Search
                 return;
             }
 
+            // Stop any ongoing search first
+            if (isSearching)
+            {
+                await HandleStop();
+            }
+
+            var limits = ParseGoCommand(parts);
+
+            // Create a copy of the position for the search thread
+            Position searchPosition;
+            lock (positionLock)
+            {
+                searchPosition = new Position(position);
+            }
+
+            // Start new search
+            isSearching = true;
+            searchCancellation = new CancellationTokenSource();
+            var cancellationToken = searchCancellation.Token;
+
+            searchTask = Task.Run(async () =>
+            {
+                try
+                {
+                    var result = search.StartSearch(searchPosition, limits);
+
+                    // Always output bestmove unless explicitly cancelled
+                    if (!cancellationToken.IsCancellationRequested)
+                    {
+                        SendCommand($"bestmove {result.BestMove}");
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Search was cancelled - output current best move if available
+                    SendCommand("bestmove 0000");
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Search error: {ex.Message}");
+                    // Always output something to prevent GUI hanging
+                    SendCommand("bestmove 0000");
+                }
+                finally
+                {
+                    isSearching = false;
+                }
+            }, cancellationToken);
+
+            // Don't await - return immediately to continue processing UCI commands
+        }
+
+        private SearchLimits ParseGoCommand(string[] parts)
+        {
             var limits = new SearchLimits();
             bool hasTimeControl = false;
 
@@ -190,39 +272,47 @@ namespace Search
                         break;
 
                     case "wtime":
-                        if (i + 1 < parts.Length && long.TryParse(parts[i + 1], out long wtime) &&
-                            position.Turn == Color.White)
+                        if (i + 1 < parts.Length && long.TryParse(parts[i + 1], out long wtime))
                         {
-                            limits.Time = wtime;
-                            hasTimeControl = true;
+                            if (position.Turn == Color.White)
+                            {
+                                limits.Time = wtime;
+                                hasTimeControl = true;
+                            }
                             i++;
                         }
                         break;
 
                     case "btime":
-                        if (i + 1 < parts.Length && long.TryParse(parts[i + 1], out long btime) &&
-                            position.Turn == Color.Black)
+                        if (i + 1 < parts.Length && long.TryParse(parts[i + 1], out long btime))
                         {
-                            limits.Time = btime;
-                            hasTimeControl = true;
+                            if (position.Turn == Color.Black)
+                            {
+                                limits.Time = btime;
+                                hasTimeControl = true;
+                            }
                             i++;
                         }
                         break;
 
                     case "winc":
-                        if (i + 1 < parts.Length && long.TryParse(parts[i + 1], out long winc) &&
-                            position.Turn == Color.White)
+                        if (i + 1 < parts.Length && long.TryParse(parts[i + 1], out long winc))
                         {
-                            limits.Inc = winc;
+                            if (position.Turn == Color.White)
+                            {
+                                limits.Inc = winc;
+                            }
                             i++;
                         }
                         break;
 
                     case "binc":
-                        if (i + 1 < parts.Length && long.TryParse(parts[i + 1], out long binc) &&
-                            position.Turn == Color.Black)
+                        if (i + 1 < parts.Length && long.TryParse(parts[i + 1], out long binc))
                         {
-                            limits.Inc = binc;
+                            if (position.Turn == Color.Black)
+                            {
+                                limits.Inc = binc;
+                            }
                             i++;
                         }
                         break;
@@ -242,164 +332,144 @@ namespace Search
                 }
             }
 
-            // If no time control specified and not infinite, set reasonable defaults
+            // If no time control specified, set reasonable defaults
             if (!hasTimeControl)
             {
-                limits.Depth = 12;
+                limits.Depth = 10;
                 limits.MoveTime = 5000;
             }
 
-            // REMOVED: await HandleStop();
-            // This call is redundant. The UCI protocol guarantees that a `position`, `stop`,
-            // or `ucinewgame` command will be sent before a new `go` command, and those
-            // handlers already correctly stop any ongoing search.
-
-            // Create a copy of the position for the search thread
-            Position searchPosition;
-            lock (positionLock)
-            {
-                searchPosition = new Position(position);
-            }
-
-            // Start new search
-            searchCancellation = new CancellationTokenSource();
-            var cancellationToken = searchCancellation.Token;
-
-            searchTask = Task.Run(() =>
-            {
-                try
-                {
-                    var result = search.StartSearch(searchPosition, limits);
-
-                    // Only output bestmove if not cancelled
-                    if (!cancellationToken.IsCancellationRequested)
-                    {
-                        SendCommand($"bestmove {result.BestMove}");
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    // Search was cancelled, don't output anything
-                }
-                catch (Exception ex)
-                {
-                    // Log any unexpected errors
-                    Console.Error.WriteLine($"Search error: {ex.Message}");
-                }
-            }, cancellationToken);
-
-            // REMOVED: The entire block that awaits the searchTask.
-            // The HandleGo method now returns immediately after starting the search,
-            // allowing the main UCI loop to process other commands like "stop".
+            return limits;
         }
 
         private async Task HandleStop()
         {
-            if (searchTask != null)
+            if (isSearching && searchTask != null)
             {
-                // First tell the search to stop
+                // Tell the search to stop
                 search.StopSearch();
 
-                // Then cancel the task if we have a cancellation token
+                // Cancel the task
                 searchCancellation?.Cancel();
 
                 try
                 {
-                    // Wait for the task to complete with a timeout
-                    if (searchTask != null)
-                    {
-                        await searchTask.WaitAsync(TimeSpan.FromSeconds(2));
-                    }
+                    // Wait for the task to complete with a shorter timeout
+                    await searchTask.WaitAsync(TimeSpan.FromMilliseconds(500));
                 }
                 catch (TimeoutException)
                 {
-                    // If it doesn't stop in time, we'll continue anyway
                     Console.Error.WriteLine("Warning: Search didn't stop in time");
+                    // Force output bestmove to prevent GUI hanging
+                    SendCommand("bestmove 0000");
                 }
                 catch (OperationCanceledException)
                 {
-                    // This is expected
+                    // Expected when cancelling
                 }
-
-                // Clean up
-                searchCancellation?.Dispose();
-                searchCancellation = null;
-                searchTask = null;
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Stop error: {ex.Message}");
+                }
+                finally
+                {
+                    // Always clean up
+                    searchCancellation?.Dispose();
+                    searchCancellation = null;
+                    searchTask = null;
+                    isSearching = false;
+                }
             }
         }
 
         private Move.Move ParseMove(string moveStr)
         {
-            if (moveStr.Length < 4)
+            if (string.IsNullOrEmpty(moveStr) || moveStr.Length < 4)
                 return new Move.Move(); // Invalid move
 
-            var from = ParseSquare(moveStr.Substring(0, 2));
-            var to = ParseSquare(moveStr.Substring(2, 2));
-
-            if (from == Square.NoSquare || to == Square.NoSquare)
-                return new Move.Move(); // Invalid move
-
-            // Check for promotion
-            if (moveStr.Length == 5)
+            try
             {
-                var promoPiece = moveStr[4];
-                var flags = MoveFlags.Quiet;
+                var from = ParseSquare(moveStr.Substring(0, 2));
+                var to = ParseSquare(moveStr.Substring(2, 2));
 
-                // Check if it's a capture by looking at the current position
-                if (position.At(to) != Piece.NoPiece)
+                if (from == Square.NoSquare || to == Square.NoSquare)
+                    return new Move.Move(); // Invalid move
+
+                // Generate all legal moves to find the correct move with proper flags
+                var moves = new Move.Move[256];
+                var moveCount = GenerateMovesForPosition(moves);
+
+                // Find the matching move
+                for (int i = 0; i < moveCount; i++)
                 {
-                    // Promotion capture
-                    switch (promoPiece)
+                    if (moves[i].From == from && moves[i].To == to)
                     {
-                        case 'q': flags = MoveFlags.PcQueen; break;
-                        case 'r': flags = MoveFlags.PcRook; break;
-                        case 'b': flags = MoveFlags.PcBishop; break;
-                        case 'n': flags = MoveFlags.PcKnight; break;
-                        default: return new Move.Move(); // Invalid promotion
+                        // For promotions, check if the promotion piece matches
+                        if (moveStr.Length == 5)
+                        {
+                            var promoPiece = moveStr[4];
+                            var expectedFlags = GetPromotionFlags(promoPiece, position.At(to) != Piece.NoPiece);
+                            if (moves[i].Flags == expectedFlags)
+                            {
+                                return moves[i];
+                            }
+                        }
+                        else
+                        {
+                            // Return first matching non-promotion move
+                            if ((moves[i].Flags & MoveFlags.Promotions) == 0)
+                            {
+                                return moves[i];
+                            }
+                        }
                     }
                 }
-                else
+
+                // If no exact match found and it's a promotion, create one
+                if (moveStr.Length == 5)
                 {
-                    // Quiet promotion
-                    switch (promoPiece)
-                    {
-                        case 'q': flags = MoveFlags.PrQueen; break;
-                        case 'r': flags = MoveFlags.PrRook; break;
-                        case 'b': flags = MoveFlags.PrBishop; break;
-                        case 'n': flags = MoveFlags.PrKnight; break;
-                        default: return new Move.Move(); // Invalid promotion
-                    }
+                    var promoPiece = moveStr[4];
+                    var flags = GetPromotionFlags(promoPiece, position.At(to) != Piece.NoPiece);
+                    return new Move.Move(from, to, flags);
                 }
 
-                return new Move.Move(from, to, flags);
+                // Return basic move if no legal move found (shouldn't happen)
+                return new Move.Move(from, to);
             }
-
-            // Generate all legal moves to find the correct move with proper flags
-            var moves = new Move.Move[256];
-            var moveCount = GenerateMovesForPosition(moves);
-
-            // Find the matching move
-            for (int i = 0; i < moveCount; i++)
+            catch (Exception ex)
             {
-                if (moves[i].From == from && moves[i].To == to)
-                {
-                    return moves[i];
-                }
+                Console.Error.WriteLine($"Move parsing error for '{moveStr}': {ex.Message}");
+                return new Move.Move();
             }
+        }
 
-            // If no matching legal move found, create a basic move
-            // This shouldn't happen with valid UCI input
-            return new Move.Move(from, to);
+        private MoveFlags GetPromotionFlags(char promoPiece, bool isCapture)
+        {
+            return promoPiece switch
+            {
+                'q' => isCapture ? MoveFlags.PcQueen : MoveFlags.PrQueen,
+                'r' => isCapture ? MoveFlags.PcRook : MoveFlags.PrRook,
+                'b' => isCapture ? MoveFlags.PcBishop : MoveFlags.PrBishop,
+                'n' => isCapture ? MoveFlags.PcKnight : MoveFlags.PrKnight,
+                _ => MoveFlags.Quiet
+            };
         }
 
         private unsafe int GenerateMovesForPosition(Move.Move[] moveBuffer)
         {
-            fixed (Move.Move* movesPtr = moveBuffer)
+            try
             {
-                if (position.Turn == Color.White)
-                    return position.GenerateLegalsInto<White>(movesPtr);
-                else
-                    return position.GenerateLegalsInto<Black>(movesPtr);
+                fixed (Move.Move* movesPtr = moveBuffer)
+                {
+                    if (position.Turn == Color.White)
+                        return position.GenerateLegalsInto<White>(movesPtr);
+                    else
+                        return position.GenerateLegalsInto<Black>(movesPtr);
+                }
+            }
+            catch
+            {
+                return 0;
             }
         }
 
@@ -419,30 +489,44 @@ namespace Search
 
         private void HandlePerft(int depth)
         {
-            var fen = position.Fen();
-            Console.WriteLine($"Running perft depth {depth} on position:");
-            Console.WriteLine($"FEN: {fen}");
-            Console.WriteLine();
-
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            var result = Test.Perft.RunSingle(position, (uint)depth);
-            sw.Stop();
-
-            Console.WriteLine($"Nodes searched: {result:N0}");
-            Console.WriteLine($"Time: {sw.ElapsedMilliseconds}ms");
-
-            if (sw.ElapsedMilliseconds > 0)
+            try
             {
-                var nps = result * 1000 / (ulong)sw.ElapsedMilliseconds;
-                Console.WriteLine($"Nodes/second: {nps:N0}");
+                var fen = position.Fen();
+                Console.WriteLine($"Running perft depth {depth} on position:");
+                Console.WriteLine($"FEN: {fen}");
+                Console.WriteLine();
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var result = Test.Perft.RunSingle(position, (uint)depth);
+                sw.Stop();
+
+                Console.WriteLine($"Nodes searched: {result:N0}");
+                Console.WriteLine($"Time: {sw.ElapsedMilliseconds}ms");
+
+                if (sw.ElapsedMilliseconds > 0)
+                {
+                    var nps = result * 1000 / (ulong)sw.ElapsedMilliseconds;
+                    Console.WriteLine($"Nodes/second: {nps:N0}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Perft error: {ex.Message}");
             }
         }
 
         private void HandleBench()
         {
-            Console.WriteLine("Running benchmark suite...");
-            Console.WriteLine();
-            Perft.RunBenchmark();
+            try
+            {
+                Console.WriteLine("Running benchmark suite...");
+                Console.WriteLine();
+                Perft.RunBenchmark();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Benchmark error: {ex.Message}");
+            }
         }
     }
 }
