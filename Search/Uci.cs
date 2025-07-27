@@ -54,7 +54,7 @@ namespace Search
                         break;
 
                     case "go":
-                        await HandleGo(parts);
+                        _ = HandleGo(parts);
                         break;
 
                     case "stop":
@@ -249,8 +249,10 @@ namespace Search
                 limits.MoveTime = 5000;
             }
 
-            // Stop any ongoing search
-            await HandleStop();
+            // REMOVED: await HandleStop();
+            // This call is redundant. The UCI protocol guarantees that a `position`, `stop`,
+            // or `ucinewgame` command will be sent before a new `go` command, and those
+            // handlers already correctly stop any ongoing search.
 
             // Create a copy of the position for the search thread
             Position searchPosition;
@@ -286,34 +288,28 @@ namespace Search
                 }
             }, cancellationToken);
 
-            // Don't await the search task here for infinite analysis
-            if (!limits.Infinite)
-            {
-                try
-                {
-                    await searchTask;
-                }
-                catch (OperationCanceledException)
-                {
-                    // Normal cancellation, ignore
-                }
-            }
+            // REMOVED: The entire block that awaits the searchTask.
+            // The HandleGo method now returns immediately after starting the search,
+            // allowing the main UCI loop to process other commands like "stop".
         }
 
         private async Task HandleStop()
         {
-            if (searchCancellation != null && searchTask != null)
+            if (searchTask != null)
             {
                 // First tell the search to stop
                 search.StopSearch();
 
-                // Then cancel the task
-                searchCancellation.Cancel();
+                // Then cancel the task if we have a cancellation token
+                searchCancellation?.Cancel();
 
                 try
                 {
                     // Wait for the task to complete with a timeout
-                    await searchTask.WaitAsync(TimeSpan.FromSeconds(2));
+                    if (searchTask != null)
+                    {
+                        await searchTask.WaitAsync(TimeSpan.FromSeconds(2));
+                    }
                 }
                 catch (TimeoutException)
                 {
@@ -326,7 +322,7 @@ namespace Search
                 }
 
                 // Clean up
-                searchCancellation.Dispose();
+                searchCancellation?.Dispose();
                 searchCancellation = null;
                 searchTask = null;
             }

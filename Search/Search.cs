@@ -47,7 +47,7 @@ namespace Search
 
         // Time management
         private readonly TimeManager timeManager;
-        private CancellationTokenSource? searchCancellation;
+        private volatile bool stopSearch = false;  // Made volatile for thread safety
 
         public Search(int ttSizeMB = 128, int threadCount = 1)
         {
@@ -76,15 +76,9 @@ namespace Search
 
         public SearchResult StartSearch(Position position, SearchLimits limits)
         {
-            lock (searchLock)
-            {
-                // Cancel any previous search
-                searchCancellation?.Cancel();
-                searchCancellation?.Dispose();
+            // Reset stop flag
+            stopSearch = false;
 
-                // Create new cancellation token
-                searchCancellation = new CancellationTokenSource();
-            }
             rootPosition = new Position(position);
 
             // Reset search state
@@ -140,9 +134,12 @@ namespace Search
                 var aspWindow = initialAspWindow;
                 var searchStartTime = timeManager.ElapsedMs();
 
-                while (failCount < MAX_ASPIRATION_RETRIES)
+                while (failCount < MAX_ASPIRATION_RETRIES && !stopSearch)
                 {
                     bestScore = SearchRoot(depth, alpha, beta, rootMoves);
+
+                    if (stopSearch)
+                        break;
 
                     // Check aspiration window failure
                     if (bestScore <= alpha)
@@ -163,10 +160,6 @@ namespace Search
                     }
                     else
                     {
-                        if (depth == 11)
-                        {
-
-                        }
                         // Search completed successfully within window
                         break;
                     }
@@ -243,6 +236,8 @@ namespace Search
 
         private int SearchRoot(int depth, int alpha, int beta, List<RootMove> rootMoves)
         {
+            if (stopSearch) return 0;
+
             var bestScore = -INFINITY;
             pvLength[0] = 0;
 
@@ -251,7 +246,7 @@ namespace Search
 
             int bestMoveIndex = -1;
 
-            for (int moveIndex = 0; moveIndex < rootMoves.Count; moveIndex++)
+            for (int moveIndex = 0; moveIndex < rootMoves.Count && !stopSearch; moveIndex++)
             {
                 var rootMove = rootMoves[moveIndex];
                 NodesSearched++;
@@ -290,6 +285,9 @@ namespace Search
                 // Unmake move
                 rootPosition.Undo(colorToMove, rootMove.Move);
 
+                if (stopSearch)
+                    break;
+
                 rootMove.Score = score;
                 rootMove.PreviousScore = rootMove.Score;
 
@@ -309,13 +307,10 @@ namespace Search
                             break;
                     }
                 }
-
-                if (ShouldStopSearch())
-                    break;
             }
 
             // Move best move to front after the search loop
-            if (bestMoveIndex > 0)
+            if (bestMoveIndex > 0 && bestMoveIndex < rootMoves.Count)
             {
                 var bestMove = rootMoves[bestMoveIndex];
                 rootMoves.RemoveAt(bestMoveIndex);
@@ -327,10 +322,10 @@ namespace Search
 
         private int AlphaBeta(int depth, int alpha, int beta, int ply, bool pvNode)
         {
-            if (depth > 11)
-            {
+            // Check stop flag immediately
+            if (stopSearch)
+                return 0;
 
-            }
             // Check time and stop conditions
             if ((NodesSearched & 2047) == 0 && ShouldStopSearch())
                 return 0;
@@ -419,8 +414,6 @@ namespace Search
             bool improving = ply >= 2 && !inCheck &&
                            staticEval > staticEvalStack[ply - 2];
 
-            // Razoring - removed since it depends on quiescence
-
             // Futility pruning
             if (!pvNode && !inCheck && depth <= 8 &&
                 staticEval - 75 * depth >= beta &&
@@ -431,7 +424,7 @@ namespace Search
 
             // Null move pruning
             if (!pvNode && !inCheck && depth >= 3 && staticEval >= beta &&
-                ply > 0 && HasNonPawnMaterial())
+                ply > 0 && HasNonPawnMaterial() && !stopSearch)
             {
                 int R = 3 + depth / 6 + Math.Min(3, (staticEval - beta) / 200);
                 R = Math.Min(depth - 1, R);
@@ -439,6 +432,9 @@ namespace Search
                 rootPosition.MakeNullMove();
                 int nullScore = -AlphaBeta(depth - R - 1, -beta, -beta + 1, ply + 1, false);
                 rootPosition.UnmakeNullMove();
+
+                if (stopSearch)
+                    return 0;
 
                 if (nullScore >= beta)
                 {
@@ -451,7 +447,7 @@ namespace Search
             }
 
             // Internal iterative deepening
-            if (pvNode && depth >= 6 && ttMove.From == ttMove.To)
+            if (pvNode && depth >= 6 && ttMove.From == ttMove.To && !stopSearch)
             {
                 AlphaBeta(depth - 2, alpha, beta, ply, true);
                 ttEntry = tt.Probe(rootPosition.GetHash());
@@ -475,7 +471,7 @@ namespace Search
             var movesSearched = 0;
             var quietMovesSeen = 0;
 
-            for (int i = 0; i < moveCount; i++)
+            for (int i = 0; i < moveCount && !stopSearch; i++)
             {
                 var move = moves[i];
                 NodesSearched++;
@@ -535,6 +531,9 @@ namespace Search
                 // Unmake move
                 rootPosition.Undo(colorToMove, move);
 
+                if (stopSearch)
+                    break;
+
                 if (!move.IsCapture && move.Flags != MoveFlags.PrQueen && move.Flags != MoveFlags.PcQueen)
                     quietMovesSeen++;
 
@@ -564,21 +563,21 @@ namespace Search
                         }
                     }
                 }
-
-                if (ShouldStopSearch())
-                    break;
             }
 
-            // Store in transposition table
-            var flag = bestScore >= beta ? TTFlag.LowerBound :
-                      bestScore <= alpha ? TTFlag.UpperBound : TTFlag.Exact;
+            // Store in transposition table only if search wasn't stopped
+            if (!stopSearch)
+            {
+                var flag = bestScore >= beta ? TTFlag.LowerBound :
+                          bestScore <= alpha ? TTFlag.UpperBound : TTFlag.Exact;
 
-            tt.Store(rootPosition.GetHash(), depth, ScoreToTT(bestScore, ply), flag, bestMove);
+                tt.Store(rootPosition.GetHash(), depth, ScoreToTT(bestScore, ply), flag, bestMove);
+            }
 
             return bestScore;
         }
 
-        // Helper methods
+        // Helper methods (unchanged)
         private int LogarithmicReduction(int depth, int moveNumber)
         {
             return (int)(0.5 + Math.Log(depth) * Math.Log(moveNumber) / 2.0);
@@ -624,10 +623,7 @@ namespace Search
 
         private bool IsFiftyMoveRule()
         {
-            // The fifty-move rule should check halfmove clock
-            // For now, return false as the Position class doesn't track halfmove clock
-            // This would need to be implemented in the Position class
-            return false;
+            return rootPosition.IsFiftyMoveRule();
         }
 
         private int GetPromotionValue(MoveFlags flags)
@@ -681,11 +677,6 @@ namespace Search
             var buffer = new Move.Move[MAX_MOVES];
             var count = GenerateMovesInto(buffer);
             var rootMoves = new List<RootMove>(count);
-
-            if (count == 0)
-            {
-                throw new Exception("Here");
-            }
 
             for (int i = 0; i < count; i++)
                 rootMoves.Add(new RootMove { Move = buffer[i] });
@@ -775,8 +766,8 @@ namespace Search
         // Search control
         private bool ShouldStopSearch()
         {
-            // Check cancellation more frequently
-            if (searchCancellation?.IsCancellationRequested ?? false)
+            // Check stop flag first
+            if (stopSearch)
                 return true;
 
             return timeManager.ShouldStop();
@@ -784,10 +775,11 @@ namespace Search
 
         public void StopSearch()
         {
-            lock (searchLock)
-            {
-                searchCancellation?.Cancel();
-            }
+            // Set the stop flag immediately
+            stopSearch = true;
+
+            // Also tell the time manager to stop
+            timeManager.ForceStop();
         }
 
         private void PrintSearchInfo(SearchResult result)
@@ -799,7 +791,7 @@ namespace Search
         }
     }
 
-    // Helper classes with minimal modifications
+    // Helper classes remain unchanged...
     public class RootMove
     {
         public Move.Move Move { get; set; }

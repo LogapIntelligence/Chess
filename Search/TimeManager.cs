@@ -11,6 +11,7 @@ namespace Search
         private long maxTime;
         private long startTime;
         private bool infinite;
+        private volatile bool forceStop = false;  // Added for external stop control
 
         public TimeManager()
         {
@@ -22,6 +23,7 @@ namespace Search
             stopwatch.Restart();
             startTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             infinite = limits.Infinite;
+            forceStop = false;  // Reset force stop flag
 
             if (limits.MoveTime > 0)
             {
@@ -29,7 +31,7 @@ namespace Search
                 allocatedTime = limits.MoveTime - 50; // 50ms safety margin
                 maxTime = limits.MoveTime;
             }
-            else if (limits.Time > 0)
+            else if (limits.Time > 0 && !infinite)  // Don't set time limits for infinite
             {
                 // Time control with increment
                 var timeLeft = limits.Time;
@@ -40,17 +42,23 @@ namespace Search
                 allocatedTime = CalculateAllocatedTime(timeLeft, increment, movesToGo);
                 maxTime = Math.Min(timeLeft / 3, allocatedTime * 3); // More conservative max time
             }
-            else if (limits.Depth < 128) // Depth-only search
+            else if (limits.Depth < 128 && !infinite) // Depth-only search
             {
                 // For depth-limited search, give reasonable time limits
                 allocatedTime = 30000; // 30 seconds max
                 maxTime = 60000; // 1 minute absolute max
             }
+            else if (infinite)
+            {
+                // Infinite analysis - no time limits
+                allocatedTime = long.MaxValue;
+                maxTime = long.MaxValue;
+            }
             else
             {
                 // No time limit - but set reasonable defaults to prevent infinite search
-                allocatedTime = int.MaxValue; // 10 seconds default
-                maxTime = int.MaxValue; // 30 seconds max
+                allocatedTime = 10000; // 10 seconds default
+                maxTime = 30000; // 30 seconds max
             }
         }
 
@@ -79,6 +87,11 @@ namespace Search
 
         public bool ShouldStop()
         {
+            // Check force stop first
+            if (forceStop)
+                return true;
+
+            // Infinite analysis never stops on time
             if (infinite)
                 return false;
 
@@ -87,10 +100,20 @@ namespace Search
 
         public bool ShouldStopHard()
         {
+            // Check force stop first
+            if (forceStop)
+                return true;
+
+            // Infinite analysis never stops on time
             if (infinite)
                 return false;
 
             return ElapsedMs() >= maxTime;
+        }
+
+        public void ForceStop()
+        {
+            forceStop = true;
         }
 
         public long ElapsedMs()
@@ -110,7 +133,10 @@ namespace Search
 
         public void ExtendTime(int factor)
         {
-            allocatedTime = Math.Min(allocatedTime * factor, maxTime);
+            if (!infinite)
+            {
+                allocatedTime = Math.Min(allocatedTime * factor, maxTime);
+            }
         }
     }
 }
