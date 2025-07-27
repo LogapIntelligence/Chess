@@ -234,12 +234,12 @@ namespace Search
             if (stopSearch) return 0;
 
             var bestScore = -INFINITY;
+            var bestMoveIndex = -1;  // Index of move that beat alpha
+            var fallbackMoveIndex = 0;  // Best move when all fail low
             pvLength[0] = 0;
 
             // Sort root moves by previous iteration scores
             rootMoves.Sort((a, b) => b.PreviousScore.CompareTo(a.PreviousScore));
-
-            int bestMoveIndex = -1;
 
             for (int moveIndex = 0; moveIndex < rootMoves.Count && !stopSearch; moveIndex++)
             {
@@ -289,13 +289,13 @@ namespace Search
                 if (score > bestScore)
                 {
                     bestScore = score;
+                    fallbackMoveIndex = moveIndex;  // Always track best move
 
                     if (score > alpha)
                     {
                         alpha = score;
-                        bestMoveIndex = moveIndex;
-
-                        // Update PV
+                        bestMoveIndex = moveIndex;  // Track move that beat alpha
+                                                    // Update PV
                         UpdatePV(rootMove.Move, 0);
 
                         if (score >= beta)
@@ -305,10 +305,13 @@ namespace Search
             }
 
             // Move best move to front
-            if (bestMoveIndex > 0 && bestMoveIndex < rootMoves.Count)
+            // Use bestMoveIndex if we found a move that beat alpha, otherwise use fallback
+            int moveToPromote = bestMoveIndex >= 0 ? bestMoveIndex : fallbackMoveIndex;
+
+            if (moveToPromote > 0 && moveToPromote < rootMoves.Count)
             {
-                var bestMove = rootMoves[bestMoveIndex];
-                rootMoves.RemoveAt(bestMoveIndex);
+                var bestMove = rootMoves[moveToPromote];
+                rootMoves.RemoveAt(moveToPromote);
                 rootMoves.Insert(0, bestMove);
             }
 
