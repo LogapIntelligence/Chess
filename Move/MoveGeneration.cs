@@ -106,7 +106,9 @@ namespace Move
                                         moveList[listIdx++] = new Move(Bitboard.PopLsb(ref b1), pos.History[pos.Ply].Epsq, MoveFlags.EnPassant);
                                 }
                             }
-                            goto case 0;
+                            captureask = pos.Checkers;
+                            quietMask = 0;
+                            break;
                         }
                         else if (checkerPiece == Types.MakePiece(themColor, PieceType.Knight))
                         {

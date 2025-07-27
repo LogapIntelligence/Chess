@@ -219,8 +219,10 @@ namespace Move
 
             if (m.IsCapture && board[(int)m.To] != Piece.NoPiece)
             {
-                var capturedType = Types.TypeOf(board[(int)m.To]);
-                if (capturedType == PieceType.Rook)
+                var capturedPiece = board[(int)m.To];
+                var capturedType = Types.TypeOf(capturedPiece);
+                var capturedColor = Types.ColorOf(capturedPiece);
+                if (capturedType == PieceType.Rook && capturedColor != us)
                 {
                     if (m.To == Square.a1) History[gamePly].Entry |= Bitboard.WHITE_OOO_MASK;
                     else if (m.To == Square.h1) History[gamePly].Entry |= Bitboard.WHITE_OO_MASK;

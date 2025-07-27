@@ -129,7 +129,7 @@ namespace Move
         public Square From => (Square)((move >> 6) & 0x3f);
         public int ToFrom => move & 0xffff;
         public MoveFlags Flags => (MoveFlags)((move >> 12) & 0xf);
-        public bool IsCapture => ((move >> 12) & (int)MoveFlags.Captures) != 0;
+        public bool IsCapture => ((move >> 12) & 0b1000) != 0;
 
         public override string ToString()
         {
