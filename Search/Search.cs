@@ -795,6 +795,7 @@ namespace Search
             Console.WriteLine($"info depth {result.Depth} seldepth {SelectiveDepth} score cp {result.Score} " +
                             $"nodes {result.Nodes} nps {result.Nodes * 1000 / (ulong)Math.Max(1, result.Time)} " +
                             $"time {result.Time} hashfull {tt.HashFull()} pv {string.Join(" ", result.Pv)}");
+            Console.Out.Flush();
         }
     }
 

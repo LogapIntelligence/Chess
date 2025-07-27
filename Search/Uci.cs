@@ -41,7 +41,7 @@ namespace Search
                         break;
 
                     case "isready":
-                        Console.WriteLine("readyok");
+                        SendCommand("readyok");
                         break;
 
                     case "ucinewgame":
@@ -83,11 +83,11 @@ namespace Search
 
         private void HandleUci()
         {
-            Console.WriteLine("id name GORB");
-            Console.WriteLine("id author Assistant");
-            Console.WriteLine("option name Hash type spin default 128 min 1 max 16384");
-            Console.WriteLine("option name Threads type spin default 1 min 1 max 1");
-            Console.WriteLine("uciok");
+            SendCommand("id name GORB2");
+            SendCommand("id author Assistant");
+            SendCommand("option name Hash type spin default 128 min 1 max 16384");
+            SendCommand("option name Threads type spin default 1 min 1 max 1");
+            SendCommand("uciok");
         }
 
         private void HandleNewGame()
@@ -129,7 +129,11 @@ namespace Search
                 }
             }
         }
-
+        private void SendCommand(string command)
+        {
+            Console.WriteLine(command);
+            Console.Out.Flush();
+        }
         private async Task HandleGo(string[] parts)
         {
             // Check if this is a perft command
@@ -240,7 +244,7 @@ namespace Search
                     // Only output bestmove if not cancelled
                     if (!searchCancellation.Token.IsCancellationRequested)
                     {
-                        Console.WriteLine($"bestmove {result.BestMove}");
+                        SendCommand($"bestmove {result.BestMove}");
                     }
                 }
                 catch (OperationCanceledException)

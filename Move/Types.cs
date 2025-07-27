@@ -146,7 +146,28 @@ namespace Move
 
         public override string ToString()
         {
-            return Types.SQSTR[(int)From] + Types.SQSTR[(int)To] + Types.MOVE_TYPESTR[(int)Flags];
+            return Types.SQSTR[(int)From] + Types.SQSTR[(int)To] + GetPromotionChar();
+        }
+        private string GetPromotionChar()
+        {
+            // Only add promotion character for promotion moves
+            switch (Flags)
+            {
+                case MoveFlags.PrQueen:
+                case MoveFlags.PcQueen:
+                    return "q";
+                case MoveFlags.PrRook:
+                case MoveFlags.PcRook:
+                    return "r";
+                case MoveFlags.PrBishop:
+                case MoveFlags.PcBishop:
+                    return "b";
+                case MoveFlags.PrKnight:
+                case MoveFlags.PcKnight:
+                    return "n";
+                default:
+                    return ""; // No suffix for non-promotion moves
+            }
         }
 
         public override bool Equals(object? obj) => obj is Move m && ToFrom == m.ToFrom;
