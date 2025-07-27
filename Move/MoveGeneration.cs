@@ -218,23 +218,59 @@ namespace Move
 
         private static unsafe void HandleCastlingInto(Position pos, Color usColor, ulong all, ulong danger, Move* moveList, ref int listIdx)
         {
-            if ((pos.History[pos.Ply].Entry & Bitboard.OoMask(usColor)) == 0 &&
-                ((all | danger) & Bitboard.OoBlockersMask(usColor)) == 0)
-            {
-                moveList[listIdx++] = usColor == Color.White ?
-                    new Move(Square.e1, Square.g1, MoveFlags.OO) :
-                    new Move(Square.e8, Square.g8, MoveFlags.OO);
-            }
+            var rights = pos.History[pos.Ply].Castling;
 
-            if ((pos.History[pos.Ply].Entry & Bitboard.OooMask(usColor)) == 0 &&
-                ((all | (danger & ~Bitboard.IgnoreOooDanger(usColor))) & Bitboard.OooBlockersMask(usColor)) == 0)
+            if (usColor == Color.White)
             {
-                moveList[listIdx++] = usColor == Color.White ?
-                    new Move(Square.e1, Square.c1, MoveFlags.OOO) :
-                    new Move(Square.e8, Square.c8, MoveFlags.OOO);
+                // Kingside Castling (O-O)
+                if ((rights & CastlingRights.WhiteOO) != 0 &&
+                    (Bitboard.SQUARE_BB[(int)Square.f1] & all) == 0 &&
+                    (Bitboard.SQUARE_BB[(int)Square.g1] & all) == 0 &&
+                    (danger & Bitboard.SQUARE_BB[(int)Square.e1]) == 0 &&
+                    (danger & Bitboard.SQUARE_BB[(int)Square.f1]) == 0 &&
+                    (danger & Bitboard.SQUARE_BB[(int)Square.g1]) == 0)
+                {
+                    moveList[listIdx++] = new Move(Square.e1, Square.g1, MoveFlags.OO);
+                }
+
+                // Queenside Castling (O-O-O)
+                if ((rights & CastlingRights.WhiteOOO) != 0 &&
+                    (Bitboard.SQUARE_BB[(int)Square.d1] & all) == 0 &&
+                    (Bitboard.SQUARE_BB[(int)Square.c1] & all) == 0 &&
+                    (Bitboard.SQUARE_BB[(int)Square.b1] & all) == 0 &&
+                    (danger & Bitboard.SQUARE_BB[(int)Square.e1]) == 0 &&
+                    (danger & Bitboard.SQUARE_BB[(int)Square.d1]) == 0 &&
+                    (danger & Bitboard.SQUARE_BB[(int)Square.c1]) == 0)
+                {
+                    moveList[listIdx++] = new Move(Square.e1, Square.c1, MoveFlags.OOO);
+                }
+            }
+            else // Black
+            {
+                // Kingside Castling (O-O)
+                if ((rights & CastlingRights.BlackOO) != 0 &&
+                    (Bitboard.SQUARE_BB[(int)Square.f8] & all) == 0 &&
+                    (Bitboard.SQUARE_BB[(int)Square.g8] & all) == 0 &&
+                    (danger & Bitboard.SQUARE_BB[(int)Square.e8]) == 0 &&
+                    (danger & Bitboard.SQUARE_BB[(int)Square.f8]) == 0 &&
+                    (danger & Bitboard.SQUARE_BB[(int)Square.g8]) == 0)
+                {
+                    moveList[listIdx++] = new Move(Square.e8, Square.g8, MoveFlags.OO);
+                }
+
+                // Queenside Castling (O-O-O)
+                if ((rights & CastlingRights.BlackOOO) != 0 &&
+                    (Bitboard.SQUARE_BB[(int)Square.d8] & all) == 0 &&
+                    (Bitboard.SQUARE_BB[(int)Square.c8] & all) == 0 &&
+                    (Bitboard.SQUARE_BB[(int)Square.b8] & all) == 0 &&
+                    (danger & Bitboard.SQUARE_BB[(int)Square.e8]) == 0 &&
+                    (danger & Bitboard.SQUARE_BB[(int)Square.d8]) == 0 &&
+                    (danger & Bitboard.SQUARE_BB[(int)Square.c8]) == 0)
+                {
+                    moveList[listIdx++] = new Move(Square.e8, Square.c8, MoveFlags.OOO);
+                }
             }
         }
-
         private static unsafe void HandlePinnedPiecesInto(Position pos, Color usColor, ulong notPinned, Square ourKing,
             ulong all, ulong captureask, ulong quietMask, Move* moveList, ref int listIdx)
         {

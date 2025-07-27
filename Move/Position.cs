@@ -6,7 +6,7 @@ namespace Move
 {
     public struct UndoInfo
     {
-        public ulong Entry;
+        public CastlingRights Castling;
         public Piece Captured;
         public Square Epsq;
         public ulong Hash;        // Add: Store position hash
@@ -14,7 +14,7 @@ namespace Move
 
         public UndoInfo()
         {
-            Entry = 0;
+            Castling = CastlingRights.None;
             Captured = Piece.NoPiece;
             Epsq = Square.NoSquare;
             Hash = 0;
@@ -23,7 +23,7 @@ namespace Move
 
         public UndoInfo(UndoInfo prev)
         {
-            Entry = prev.Entry;
+            Castling = prev.Castling;
             Captured = Piece.NoPiece;
             Epsq = Square.NoSquare;
             Hash = 0;
@@ -186,7 +186,10 @@ namespace Move
             ++gamePly;
             History[gamePly] = new UndoInfo(History[gamePly - 1]);
             var type = m.Flags;
-            History[gamePly].Entry = History[gamePly - 1].Entry;
+
+            History[gamePly] = new UndoInfo(History[gamePly - 1]);
+            var piece = board[(int)m.From];
+            var capturedPiece = m.IsCapture ? board[(int)m.To] : Piece.NoPiece;
 
             // Reset halfmove clock on pawn move or capture
             if (Types.TypeOf(board[(int)m.From]) == PieceType.Pawn || m.IsCapture)
@@ -198,37 +201,22 @@ namespace Move
                 History[gamePly].HalfMoveClock++;
             }
 
-            // Reset halfmove clock on pawn move or capture
-            if (board[(int)m.From] == Types.MakePiece(us, PieceType.King))
+            // Remove castling rights if king moves
+            if (Types.TypeOf(piece) == PieceType.King)
             {
-                // King moved - remove castling rights for this side
-                if (us == Color.White)
-                    History[gamePly].Entry |= Bitboard.WHITE_OO_MASK | Bitboard.WHITE_OOO_MASK;
-                else
-                    History[gamePly].Entry |= Bitboard.BLACK_OO_MASK | Bitboard.BLACK_OOO_MASK;
+                History[gamePly].Castling &= ~(us == Color.White ? CastlingRights.White : CastlingRights.Black);
             }
-            else if (board[(int)m.From] == Types.MakePiece(us, PieceType.Rook))
-            {
-                // Rook moved - remove specific castling right
-                if (m.From == Square.a1 && us == Color.White) History[gamePly].Entry |= Bitboard.WHITE_OOO_MASK;
-                else if (m.From == Square.h1 && us == Color.White) History[gamePly].Entry |= Bitboard.WHITE_OO_MASK;
-                else if (m.From == Square.a8 && us == Color.Black) History[gamePly].Entry |= Bitboard.BLACK_OOO_MASK;
-                else if (m.From == Square.h8 && us == Color.Black) History[gamePly].Entry |= Bitboard.BLACK_OO_MASK;
-            }
+            // Remove castling rights if a rook moves from its starting square
+            else if (m.From == Square.h1) History[gamePly].Castling &= ~CastlingRights.WhiteOO;
+            else if (m.From == Square.a1) History[gamePly].Castling &= ~CastlingRights.WhiteOOO;
+            else if (m.From == Square.h8) History[gamePly].Castling &= ~CastlingRights.BlackOO;
+            else if (m.From == Square.a8) History[gamePly].Castling &= ~CastlingRights.BlackOOO;
 
-            if (m.IsCapture && board[(int)m.To] != Piece.NoPiece)
-            {
-                var capturedPiece = board[(int)m.To];
-                var capturedType = Types.TypeOf(capturedPiece);
-                var capturedColor = Types.ColorOf(capturedPiece);
-                if (capturedType == PieceType.Rook && capturedColor != us)
-                {
-                    if (m.To == Square.a1) History[gamePly].Entry |= Bitboard.WHITE_OOO_MASK;
-                    else if (m.To == Square.h1) History[gamePly].Entry |= Bitboard.WHITE_OO_MASK;
-                    else if (m.To == Square.a8) History[gamePly].Entry |= Bitboard.BLACK_OOO_MASK;
-                    else if (m.To == Square.h8) History[gamePly].Entry |= Bitboard.BLACK_OO_MASK;
-                }
-            }
+            // Remove castling rights if a rook is captured on its starting square
+            if (m.To == Square.h1) History[gamePly].Castling &= ~CastlingRights.WhiteOO;
+            else if (m.To == Square.a1) History[gamePly].Castling &= ~CastlingRights.WhiteOOO;
+            else if (m.To == Square.h8) History[gamePly].Castling &= ~CastlingRights.BlackOO;
+            else if (m.To == Square.a8) History[gamePly].Castling &= ~CastlingRights.BlackOOO;
 
             switch (type)
             {
@@ -462,6 +450,7 @@ namespace Move
             var fen = new StringBuilder();
             int empty;
 
+            // --- Piece Placement (No Changes Here) ---
             for (int i = 56; i >= 0; i -= 8)
             {
                 empty = 0;
@@ -487,22 +476,29 @@ namespace Move
                 if (i > 0) fen.Append('/');
             }
 
+            // --- Side to Play (No Changes Here) ---
             fen.Append(sideToPlay == Color.White ? " w " : " b ");
 
-            if ((History[gamePly].Entry & Bitboard.ALL_CASTLING_MASK) == 0)
+            // --- Castling Rights (UPDATED LOGIC) ---
+            var rights = History[gamePly].Castling;
+            if (rights == CastlingRights.None)
             {
-                fen.Append("- ");
+                fen.Append("-");
             }
             else
             {
-                if ((History[gamePly].Entry & Bitboard.WHITE_OO_MASK) == 0) fen.Append('K');
-                if ((History[gamePly].Entry & Bitboard.WHITE_OOO_MASK) == 0) fen.Append('Q');
-                if ((History[gamePly].Entry & Bitboard.BLACK_OO_MASK) == 0) fen.Append('k');
-                if ((History[gamePly].Entry & Bitboard.BLACK_OOO_MASK) == 0) fen.Append('q');
-                fen.Append(' ');
+                if ((rights & CastlingRights.WhiteOO) != 0) fen.Append('K');
+                if ((rights & CastlingRights.WhiteOOO) != 0) fen.Append('Q');
+                if ((rights & CastlingRights.BlackOO) != 0) fen.Append('k');
+                if ((rights & CastlingRights.BlackOOO) != 0) fen.Append('q');
             }
+            fen.Append(' ');
 
+            // --- En Passant Square (No Changes Here) ---
             fen.Append(History[gamePly].Epsq == Square.NoSquare ? "-" : Types.SQSTR[(int)History[gamePly].Epsq]);
+
+            // The halfmove and fullmove clocks are not implemented in this FEN string,
+            // but you would append them here if they were.
 
             return fen.ToString();
         }
@@ -549,25 +545,16 @@ namespace Move
                 if (fenIdx < fen.Length) fenIdx++;
             }
 
-            p.History[p.gamePly].Entry = Bitboard.ALL_CASTLING_MASK;
+            p.History[p.gamePly].Castling = CastlingRights.None;
             while (fenIdx < fen.Length && fen[fenIdx] != ' ')
             {
-                switch (fen[fenIdx])
+                switch (fen[fenIdx++])
                 {
-                    case 'K':
-                        p.History[p.gamePly].Entry &= ~Bitboard.WHITE_OO_MASK;
-                        break;
-                    case 'Q':
-                        p.History[p.gamePly].Entry &= ~Bitboard.WHITE_OOO_MASK;
-                        break;
-                    case 'k':
-                        p.History[p.gamePly].Entry &= ~Bitboard.BLACK_OO_MASK;
-                        break;
-                    case 'q':
-                        p.History[p.gamePly].Entry &= ~Bitboard.BLACK_OOO_MASK;
-                        break;
+                    case 'K': p.History[p.gamePly].Castling |= CastlingRights.WhiteOO; break;
+                    case 'Q': p.History[p.gamePly].Castling |= CastlingRights.WhiteOOO; break;
+                    case 'k': p.History[p.gamePly].Castling |= CastlingRights.BlackOO; break;
+                    case 'q': p.History[p.gamePly].Castling |= CastlingRights.BlackOOO; break;
                 }
-                fenIdx++;
             }
 
             if (fenIdx < fen.Length) fenIdx++;

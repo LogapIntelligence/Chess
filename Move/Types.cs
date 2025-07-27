@@ -109,6 +109,19 @@ namespace Move
         PcQueen = 0b1111
     }
 
+    [Flags]
+    public enum CastlingRights : byte
+    {
+        None = 0,
+        WhiteOO = 1,      // Kingside
+        WhiteOOO = 2,     // Queenside
+        BlackOO = 4,      // Kingside
+        BlackOOO = 8,     // Queenside
+        White = WhiteOO | WhiteOOO,
+        Black = BlackOO | BlackOOO,
+        All = White | Black
+    }
+
     public struct Move
     {
         private ushort move;
