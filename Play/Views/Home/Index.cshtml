@@ -374,7 +374,7 @@
                 }
             }
             stopInfiniteAnalysis();
-                connection.invoke("SendCommand", "go movetime 3000");
+                connection.invoke("SendCommand", "go movetime 500");
         }
 
         function onSnapEnd() {
@@ -658,7 +658,7 @@
         document.getElementById('engineMove').addEventListener('click', function() {
             if (engineLoaded) {
                 stopInfiniteAnalysis();
-                connection.invoke("SendCommand", "go movetime 3000");
+                connection.invoke("SendCommand", "go movetime 500");
             }
         });
 
@@ -689,7 +689,7 @@
                 document.getElementById('infiniteAnalysisToggle').checked = false;
 
                 addToEngineOutput("Requesting engine move...", false);
-                connection.invoke("SendCommand", "go movetime 3000");
+                connection.invoke("SendCommand", "go movetime 500");
             }
         });
 

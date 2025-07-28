@@ -147,14 +147,14 @@ namespace Search
                     // Check aspiration window failure
                     if (bestScore <= alpha)
                     {
-                        beta = alpha;
+                        beta = (alpha + beta) / 2;
                         alpha = Math.Max(-INFINITY, bestScore - aspWindow);
                         aspWindow = aspWindow + aspWindow / 2;
                         failCount++;
                     }
                     else if (bestScore >= beta)
                     {
-                        alpha = beta;
+                        beta = (alpha + beta) / 2;
                         beta = Math.Min(INFINITY, bestScore + aspWindow);
                         aspWindow = aspWindow + aspWindow / 2;
                         failCount++;
