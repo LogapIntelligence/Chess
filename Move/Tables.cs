@@ -229,6 +229,7 @@ namespace Move
             }
         }
 
+
         public static ulong GetBishopAttacks(Square square, ulong occ)
         {
             return BISHOP_ATTACKS[(int)square][((occ & BISHOP_ATTACK_MASKS[(int)square]) * BISHOP_MAGICS[(int)square])
@@ -322,7 +323,8 @@ namespace Move
 
         public static ulong Attacks(PieceType pt, Square s, ulong occ)
         {
-            if (s == Square.NoSquare)
+            // BOUNDS CHECK
+            if (s == Square.NoSquare || (int)s >= 64)
                 return 0UL;
 
             return pt switch

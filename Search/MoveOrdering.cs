@@ -8,6 +8,7 @@ namespace Search
     {
         // Move ordering scores
         private const int TT_MOVE_SCORE = 1000000;
+        private const int SAVES_HANGING_PIECE_SCORE = 950000; // NEW: Very high priority!
         private const int GOOD_CAPTURE_SCORE = 900000;
         private const int EQUAL_CAPTURE_SCORE = 850000;
         private const int KILLER_MOVE_1_SCORE = 800000;
@@ -22,6 +23,9 @@ namespace Search
         {
             var moveCount = moves.Length;
 
+            // First, detect if we have hanging pieces
+            var hangingPieces = GetHangingPieces(position);
+
             // Score all moves
             for (int i = 0; i < moveCount; i++)
             {
@@ -30,6 +34,11 @@ namespace Search
                 if (move == ttMove)
                 {
                     moveScores[i] = TT_MOVE_SCORE;
+                }
+                else if (MoveSavesHangingPiece(move, hangingPieces))
+                {
+                    // CRITICAL: Moves that save hanging pieces get very high priority!
+                    moveScores[i] = SAVES_HANGING_PIECE_SCORE;
                 }
                 else if (move.IsCapture)
                 {
@@ -88,6 +97,9 @@ namespace Search
         public int OrderMoves(Move.Move[] moves, int moveCount, Move.Move ttMove, Move.Move killer1, Move.Move killer2,
                             int[,] historyTable, Position position, Move.Move counterMove, StaticExchangeEvaluator seeEvaluator)
         {
+            // First, detect if we have hanging pieces
+            var hangingPieces = GetHangingPieces(position);
+
             // Score all moves
             for (int i = 0; i < moveCount; i++)
             {
@@ -96,6 +108,17 @@ namespace Search
                 if (move == ttMove)
                 {
                     moveScores[i] = TT_MOVE_SCORE;
+                }
+                else if (MoveSavesHangingPiece(move, hangingPieces))
+                {
+                    // CRITICAL: Moves that save hanging pieces get very high priority!
+                    moveScores[i] = SAVES_HANGING_PIECE_SCORE;
+
+                    // Additional bonus if it's also a capture
+                    if (move.IsCapture)
+                    {
+                        moveScores[i] += 10000;
+                    }
                 }
                 else if (move.IsCapture)
                 {
@@ -128,8 +151,9 @@ namespace Search
                     }
                 }
             }
+
             // Selection sort first few moves for better move ordering
-            int sortLimit = Math.Min(moveCount, 8);
+            int sortLimit = Math.Min(moveCount, 12); // Increased to ensure hanging piece saves are considered
             for (int i = 0; i < sortLimit; i++)
             {
                 var bestIdx = i;
@@ -153,6 +177,127 @@ namespace Search
             }
 
             return moveCount;
+        }
+
+        /// <summary>
+        /// Get bitboard of hanging pieces (pieces under attack and not adequately defended)
+        /// </summary>
+        private ulong GetHangingPieces(Position position)
+        {
+            ulong hanging = 0;
+            var color = position.Turn;
+            var enemyColor = color.Flip();
+            var occupied = position.AllPieces(Color.White) | position.AllPieces(Color.Black);
+
+            // Check each piece type
+            for (var pt = PieceType.Pawn; pt <= PieceType.Queen; pt++)
+            {
+                var pieces = position.BitboardOf(color, pt);
+                while (pieces != 0)
+                {
+                    var sq = Bitboard.PopLsb(ref pieces);
+
+                    // BOUNDS CHECK: Ensure square is valid
+                    if (sq == Square.NoSquare || (int)sq >= 64)
+                        continue;
+
+                    // Check if piece is attacked
+                    var attackers = GetAttackers(position, sq, occupied, enemyColor);
+                    if (attackers != 0)
+                    {
+                        // Check if piece is defended
+                        var defenders = GetAttackers(position, sq, occupied, color);
+
+                        if (defenders == 0)
+                        {
+                            // Piece is hanging!
+                            hanging |= (1UL << (int)sq);
+                        }
+                        else
+                        {
+                            // Check if we're adequately defended using simple material count
+                            var leastAttackerValue = GetLeastAttackerValue(position, attackers, enemyColor);
+                            var pieceValue = GetPieceValue(pt);
+
+                            if (leastAttackerValue < pieceValue)
+                            {
+                                // We'd lose material - consider it hanging
+                                hanging |= (1UL << (int)sq);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return hanging;
+        }
+        /// <summary>
+        /// Check if a move saves a hanging piece
+        /// </summary>
+        private bool MoveSavesHangingPiece(Move.Move move, ulong hangingPieces)
+        {
+            // BOUNDS CHECK: Ensure move squares are valid
+            if (move.From == Square.NoSquare || move.To == Square.NoSquare ||
+                (int)move.From >= 64 || (int)move.To >= 64)
+                return false;
+
+            // Direct save: moving the hanging piece
+            if ((hangingPieces & (1UL << (int)move.From)) != 0)
+            {
+                return true;
+            }
+
+            // TODO: Could also check for indirect saves (blocking attacks, capturing attackers)
+            // but for now the direct save is the most important
+
+            return false;
+        }
+
+        /// <summary>
+        /// Get all attackers of a square
+        /// </summary>
+        private ulong GetAttackers(Position position, Square square, ulong occupied, Color attackerColor)
+        {
+            ulong attackers = 0;
+
+            // Pawn attacks
+            attackers |= Tables.PawnAttacks(attackerColor.Flip(), square) & position.BitboardOf(attackerColor, PieceType.Pawn);
+
+            // Knight attacks
+            attackers |= Tables.Attacks(PieceType.Knight, square, occupied) & position.BitboardOf(attackerColor, PieceType.Knight);
+
+            // Bishop/Queen diagonal attacks
+            ulong diagonalAttacks = Tables.Attacks(PieceType.Bishop, square, occupied);
+            attackers |= diagonalAttacks & position.DiagonalSliders(attackerColor);
+
+            // Rook/Queen orthogonal attacks
+            ulong orthogonalAttacks = Tables.Attacks(PieceType.Rook, square, occupied);
+            attackers |= orthogonalAttacks & position.OrthogonalSliders(attackerColor);
+
+            // King attacks
+            attackers |= Tables.Attacks(PieceType.King, square, occupied) & position.BitboardOf(attackerColor, PieceType.King);
+
+            return attackers;
+        }
+
+        /// <summary>
+        /// Find the value of the least valuable attacker
+        /// </summary>
+        private int GetLeastAttackerValue(Position position, ulong attackers, Color color)
+        {
+            // Check pieces in order of value
+            if ((attackers & position.BitboardOf(color, PieceType.Pawn)) != 0)
+                return 100;
+            if ((attackers & position.BitboardOf(color, PieceType.Knight)) != 0)
+                return 320;
+            if ((attackers & position.BitboardOf(color, PieceType.Bishop)) != 0)
+                return 330;
+            if ((attackers & position.BitboardOf(color, PieceType.Rook)) != 0)
+                return 500;
+            if ((attackers & position.BitboardOf(color, PieceType.Queen)) != 0)
+                return 900;
+
+            return 10000; // King
         }
 
         // Overload that accepts moveCount parameter for when using pre-allocated arrays
