@@ -11,10 +11,6 @@ namespace Play.Services
         Task UnloadEngineAsync();
         Task SendCommandAsync(string command);
         Task NewGameAsync();
-        Task MakeMoveAsync(string move);
-        Task SetPositionAsync(string fen);
-        Task StartAnalysisAsync();
-        Task StopAnalysisAsync();
         bool IsEngineLoaded { get; }
     }
 
@@ -79,6 +75,8 @@ namespace Play.Services
                 if (_isEngineReady)
                 {
                     await SendCommandAsync("ucinewgame");
+                    // Use FEN for starting position
+                    await SendCommandAsync("position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
                     await _hubContext.Clients.All.SendAsync("EngineLoaded", "Engine loaded successfully");
                 }
 
@@ -121,7 +119,7 @@ namespace Play.Services
 
         public async Task SendCommandAsync(string command)
         {
-            if (_engineProcess?.StandardInput != null)
+            if (_engineProcess?.StandardInput != null && !_engineProcess.HasExited)
             {
                 await _engineProcess.StandardInput.WriteLineAsync(command);
                 await _engineProcess.StandardInput.FlushAsync();
@@ -134,39 +132,8 @@ namespace Play.Services
             if (IsEngineLoaded)
             {
                 await SendCommandAsync("ucinewgame");
-                await SendCommandAsync("position startpos");
-            }
-        }
-
-        public async Task MakeMoveAsync(string move)
-        {
-            if (IsEngineLoaded)
-            {
-                await SendCommandAsync($"position startpos moves {move}");
-            }
-        }
-
-        public async Task SetPositionAsync(string fen)
-        {
-            if (IsEngineLoaded)
-            {
-                await SendCommandAsync($"position fen {fen}");
-            }
-        }
-
-        public async Task StartAnalysisAsync()
-        {
-            if (IsEngineLoaded)
-            {
-                await SendCommandAsync("go infinite");
-            }
-        }
-
-        public async Task StopAnalysisAsync()
-        {
-            if (IsEngineLoaded)
-            {
-                await SendCommandAsync("stop");
+                // Use FEN for starting position
+                await SendCommandAsync("position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
             }
         }
 
@@ -226,7 +193,7 @@ namespace Play.Services
                         }
                         else if (i + 1 < parts.Length && parts[i + 1] == "mate" && i + 2 < parts.Length)
                         {
-                            evaluation = $"M{parts[i + 2]}";
+                            evaluation = $"#{parts[i + 2]}";
                         }
                         break;
                     case "nodes":

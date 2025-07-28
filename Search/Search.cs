@@ -22,6 +22,8 @@ namespace Search
         private readonly TranspositionTable tt;
         private readonly MoveOrdering moveOrdering;
 
+        private readonly StaticExchangeEvaluator seeEvaluator;
+
         // Move generation buffers - pre-allocated per thread
         private readonly Move.Move[][] moveBuffers;
         private readonly ArrayPool<Move.Move> movePool;
@@ -74,6 +76,8 @@ namespace Search
 
             movePool = ArrayPool<Move.Move>.Create(MAX_MOVES, MAX_PLY);
             rootPosition = new Position();
+
+            seeEvaluator = new StaticExchangeEvaluator();
         }
 
         public SearchResult StartSearch(Position position, SearchLimits limits)
@@ -461,6 +465,17 @@ namespace Search
             var prevMove = ply > 0 ? pvTable[0, ply - 1] : new Move.Move();
             moveCount = OrderMovesInPlace(moves, moveCount, ttMove, ply, prevMove);
 
+            if (!inCheck && depth >= 4 && pvNode)
+            {
+                // Quick tactical check - ensure we're not hanging pieces
+                var currentEval = Evaluate();
+                if (currentEval < alpha - 200)
+                {
+                    // We're already behind - be extra careful about hanging pieces
+                    depth++; // Extend search to catch tactics
+                }
+            }
+
             var bestScore = -INFINITY;
             var bestMove = new Move.Move();
             var movesSearched = 0;
@@ -680,10 +695,16 @@ namespace Search
                 }
 
                 // SEE pruning for non-pawn captures
-                if (!inCheck && move.IsCapture &&
-                    Types.TypeOf(rootPosition.At(move.From)) != PieceType.Pawn)
+                if (!inCheck && move.IsCapture)
                 {
-                    if (!SEEGreaterOrEqual(move, 0))
+                    // Prune bad captures more aggressively
+                    int seeThreshold = 0;
+
+                    // For losing captures, require a higher threshold
+                    if (staticEval + 200 < alpha)
+                        seeThreshold = -50; // Accept slightly losing captures when behind
+
+                    if (!seeEvaluator.SEE(rootPosition, move, seeThreshold))
                         continue;
                 }
 
@@ -734,64 +755,7 @@ namespace Search
         // Simple Static Exchange Evaluation
         private bool SEEGreaterOrEqual(Move.Move move, int threshold)
         {
-            var from = move.From;
-            var to = move.To;
-
-            // Get initial material balance
-            var capturedPiece = rootPosition.At(to);
-            var attackingPiece = rootPosition.At(from);
-
-            if (capturedPiece == Piece.NoPiece && move.Flags != MoveFlags.EnPassant)
-                return true; // Non-capture
-
-            var gain = GetMaterialValue(capturedPiece);
-
-            // Promotion bonus
-            if ((move.Flags & MoveFlags.Promotions) != 0)
-            {
-                gain += GetPromotionValue(move.Flags) - 100; // Subtract pawn value
-            }
-
-            // If we can't even beat threshold with the initial capture, fail
-            if (gain < threshold)
-                return false;
-
-            // Simple approximation: if captured piece is more valuable than attacker, it's good
-            var attackerValue = GetMaterialValue(attackingPiece);
-            if (gain >= attackerValue)
-                return true;
-
-            // More complex SEE would simulate the capture sequence here
-            // For now, use a simple heuristic
-            var balance = gain - attackerValue;
-
-            // Check if the destination square is defended
-            var occupancy = rootPosition.AllPieces(Color.White) | rootPosition.AllPieces(Color.Black);
-            occupancy &= ~(1UL << (int)from); // Remove attacker
-
-            var enemyColor = Types.ColorOf(attackingPiece).Flip();
-            var defenders = rootPosition.AttackersFrom(enemyColor, to, occupancy);
-
-            // If defended, assume we lose our piece
-            if (defenders != 0)
-            {
-                // Find least valuable defender
-                var minDefenderValue = 10000;
-                if ((defenders & rootPosition.BitboardOf(enemyColor, PieceType.Pawn)) != 0)
-                    minDefenderValue = 100;
-                else if ((defenders & rootPosition.BitboardOf(enemyColor, PieceType.Knight)) != 0)
-                    minDefenderValue = 320;
-                else if ((defenders & rootPosition.BitboardOf(enemyColor, PieceType.Bishop)) != 0)
-                    minDefenderValue = 330;
-                else if ((defenders & rootPosition.BitboardOf(enemyColor, PieceType.Rook)) != 0)
-                    minDefenderValue = 500;
-                else if ((defenders & rootPosition.BitboardOf(enemyColor, PieceType.Queen)) != 0)
-                    minDefenderValue = 900;
-
-                balance = balance - attackerValue + minDefenderValue;
-            }
-
-            return balance >= threshold;
+            return seeEvaluator.SEE(rootPosition, move, threshold);
         }
 
         private int GetMaterialValue(Piece piece)
@@ -921,16 +885,18 @@ namespace Search
         // Move ordering
         private int OrderMovesInPlace(Move.Move[] moves, int moveCount, Move.Move ttMove, int ply, Move.Move prevMove = default)
         {
+            // Use the existing move ordering but update capture scoring to use SEE
+            // This is handled by the MoveOrdering class which should also be updated
             var counterMove = prevMove.From != prevMove.To ?
                 counterMoves[(int)prevMove.From, (int)prevMove.To] : new Move.Move();
 
             return moveOrdering.OrderMoves(moves, moveCount, ttMove, killerMoves[ply, 0],
-                                         killerMoves[ply, 1], historyTable, rootPosition, counterMove);
+                                         killerMoves[ply, 1], historyTable, rootPosition, counterMove, seeEvaluator);
         }
 
         private int OrderCapturesInPlace(Move.Move[] moves, int moveCount, int ply)
         {
-            return moveOrdering.OrderCaptures(moves, moveCount, rootPosition);
+            return moveOrdering.OrderCaptures(moves, moveCount, rootPosition, seeEvaluator);
         }
 
         // PV management
@@ -1013,9 +979,27 @@ namespace Search
 
         private void PrintSearchInfo(SearchResult result)
         {
-            Console.WriteLine($"info depth {result.Depth} seldepth {SelectiveDepth} score cp {result.Score} " +
-                            $"nodes {result.Nodes} qnodes {QNodes} nps {result.Nodes * 1000 / (ulong)Math.Max(1, result.Time)} " +
-                            $"time {result.Time} hashfull {tt.HashFull()} pv {string.Join(" ", result.Pv)}");
+            // Calculate NPS more carefully to avoid precision issues
+            var timeMs = Math.Max(1, result.Time);
+            var nps = result.Nodes * 1000 / (ulong)timeMs;
+
+            // Format score properly
+            var scoreStr = Math.Abs(result.Score) >= MATE_VALUE - 100 ?
+                $"mate {(result.Score > 0 ? (MATE_VALUE - result.Score + 1) / 2 : -(MATE_VALUE + result.Score) / 2)}" :
+                $"cp {result.Score}";
+
+            // Build the info string to match UCI standard format
+            var infoStr = $"info depth {result.Depth} seldepth {SelectiveDepth} multipv 1 " +
+                          $"score {scoreStr} nodes {result.Nodes} nps {nps} " +
+                          $"tbhits 0 time {result.Time} hashfull {tt.HashFull()}";
+
+            // Add PV if available
+            if (result.Pv.Length > 0)
+            {
+                infoStr += $" pv {string.Join(" ", result.Pv)}";
+            }
+
+            Console.WriteLine(infoStr);
             Console.Out.Flush();
         }
     }

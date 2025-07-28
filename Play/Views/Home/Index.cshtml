@@ -192,8 +192,7 @@
     </style>
 
     <script>
-        // Chess game and board setup
-        let game = new Chess();
+                let game = new Chess();
         let board = null;
         let connection = null;
         let engineLoaded = false;
@@ -337,9 +336,20 @@
 
         // Initialize board
         board = Chessboard('chessboard', boardConfig);
-        
+
         // Make board responsive
         window.addEventListener('resize', board.resize);
+
+        // Simple function to set engine position using FEN
+        async function setEnginePosition() {
+            if (!engineLoaded) return;
+
+            const fen = game.fen();
+            await connection.invoke("SendCommand", `position fen ${fen}`);
+
+            // Small delay to ensure position is processed
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
 
         // Board event handlers
         function onDragStart(source, piece, position, orientation) {
@@ -366,15 +376,15 @@
             clearHighlights();
 
             if (engineLoaded) {
-                connection.invoke("SetPosition", game.fen());
-                if (document.getElementById('infiniteAnalysisToggle').checked) {
-                    startInfiniteAnalysis();
-                } else {
-                    connection.invoke("StopAnalysis");
-                }
+                // Set position and then either analyze or get move
+                setEnginePosition().then(() => {
+                    if (document.getElementById('infiniteAnalysisToggle').checked) {
+                        startInfiniteAnalysis();
+                    } else {
+                        connection.invoke("SendCommand", "go movetime 500");
+                    }
+                });
             }
-            stopInfiniteAnalysis();
-                connection.invoke("SendCommand", "go movetime 500");
         }
 
         function onSnapEnd() {
@@ -442,17 +452,33 @@
         }
 
         function makeMove(moveString) {
-            const move = game.move(moveString, { sloppy: true });
+            // Parse UCI move format
+            let from, to, promotion;
+            if (moveString.length >= 4) {
+                from = moveString.substring(0, 2);
+                to = moveString.substring(2, 4);
+                promotion = moveString.length > 4 ? moveString.substring(4, 5) : undefined;
+            } else {
+                addToEngineOutput("Invalid engine move format: " + moveString, true);
+                return;
+            }
+
+            const move = game.move({
+                from: from,
+                to: to,
+                promotion: promotion || 'q'
+            });
+
             if (move) {
                 // Ensure visual update
                 board.position(game.fen(), true);
                 updateGameStatus();
                 updateMoveHistory();
                 clearHighlights();
-                // todo
 
                 if (engineLoaded) {
-                    connection.invoke("SetPosition", game.fen());
+                    // Set position after engine move
+                    setEnginePosition();
                 }
             } else {
                 addToEngineOutput("Invalid engine move attempted: " + moveString, true);
@@ -533,15 +559,18 @@
 
         function startInfiniteAnalysis() {
             if (engineLoaded && !isAnalyzing) {
-                connection.invoke("StartAnalysis");
-                isAnalyzing = true;
-                addToEngineOutput("Infinite analysis started.");
+                // Set position first, then start analysis
+                setEnginePosition().then(() => {
+                    connection.invoke("SendCommand", "go infinite");
+                    isAnalyzing = true;
+                    addToEngineOutput("Infinite analysis started.");
+                });
             }
         }
 
         function stopInfiniteAnalysis() {
             if (engineLoaded && isAnalyzing) {
-                connection.invoke("StopAnalysis");
+                connection.invoke("SendCommand", "stop");
                 isAnalyzing = false;
                 addToEngineOutput("Infinite analysis stopped.");
                 clearHighlights();
@@ -585,12 +614,11 @@
             clearHighlights();
 
             if (engineLoaded) {
-                connection.invoke("SetPosition", game.fen());
-                if (document.getElementById('infiniteAnalysisToggle').checked) {
-                    startInfiniteAnalysis();
-                } else {
-                    connection.invoke("StopAnalysis");
-                }
+                setEnginePosition().then(() => {
+                    if (document.getElementById('infiniteAnalysisToggle').checked) {
+                        startInfiniteAnalysis();
+                    }
+                });
             }
         });
 
@@ -658,7 +686,10 @@
         document.getElementById('engineMove').addEventListener('click', function() {
             if (engineLoaded) {
                 stopInfiniteAnalysis();
-                connection.invoke("SendCommand", "go movetime 500");
+                // Ensure position is set before requesting move
+                setEnginePosition().then(() => {
+                    connection.invoke("SendCommand", "go movetime 500");
+                });
             }
         });
 
@@ -689,7 +720,10 @@
                 document.getElementById('infiniteAnalysisToggle').checked = false;
 
                 addToEngineOutput("Requesting engine move...", false);
-                connection.invoke("SendCommand", "go movetime 500");
+                // Ensure position is set before requesting move
+                setEnginePosition().then(() => {
+                    connection.invoke("SendCommand", "go movetime 500");
+                });
             }
         });
 

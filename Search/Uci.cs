@@ -96,7 +96,7 @@ namespace Search
 
         private void HandleUci()
         {
-            SendCommand("id name GORB2");
+            SendCommand("id name Blibnuts");
             SendCommand("id author Assistant");
             SendCommand("option name Hash type spin default 128 min 1 max 16384");
             SendCommand("option name Threads type spin default 1 min 1 max 1");
@@ -138,6 +138,12 @@ namespace Search
                     {
                         // Reconstruct FEN string - be more careful about bounds
                         var fenEndIndex = movesIndex > 0 ? movesIndex : parts.Length;
+                        if (fenEndIndex - 2 <= 0)
+                        {
+                            Console.Error.WriteLine("Invalid FEN command format");
+                            return;
+                        }
+
                         var fenParts = new string[fenEndIndex - 2];
                         Array.Copy(parts, 2, fenParts, 0, fenParts.Length);
                         var fen = string.Join(" ", fenParts);
@@ -158,7 +164,7 @@ namespace Search
                             }
                             else
                             {
-                                Console.Error.WriteLine($"Invalid move: {parts[i]}");
+                                Console.Error.WriteLine($"Invalid move: {parts[i]} in position {position.Fen()}");
                                 break;
                             }
                         }
@@ -256,7 +262,7 @@ namespace Search
                     case "depth":
                         if (i + 1 < parts.Length && int.TryParse(parts[i + 1], out int depth))
                         {
-                            limits.Depth = depth;
+                            limits.Depth = Math.Max(1, Math.Min(100, depth)); // Clamp depth
                             hasTimeControl = true;
                             i++;
                         }
@@ -265,7 +271,7 @@ namespace Search
                     case "movetime":
                         if (i + 1 < parts.Length && long.TryParse(parts[i + 1], out long moveTime))
                         {
-                            limits.MoveTime = moveTime;
+                            limits.MoveTime = Math.Max(10, moveTime); // Minimum 10ms
                             hasTimeControl = true;
                             i++;
                         }
@@ -276,7 +282,7 @@ namespace Search
                         {
                             if (position.Turn == Color.White)
                             {
-                                limits.Time = wtime;
+                                limits.Time = Math.Max(0, wtime);
                                 hasTimeControl = true;
                             }
                             i++;
@@ -288,7 +294,7 @@ namespace Search
                         {
                             if (position.Turn == Color.Black)
                             {
-                                limits.Time = btime;
+                                limits.Time = Math.Max(0, btime);
                                 hasTimeControl = true;
                             }
                             i++;
@@ -300,7 +306,7 @@ namespace Search
                         {
                             if (position.Turn == Color.White)
                             {
-                                limits.Inc = winc;
+                                limits.Inc = Math.Max(0, winc);
                             }
                             i++;
                         }
@@ -311,7 +317,7 @@ namespace Search
                         {
                             if (position.Turn == Color.Black)
                             {
-                                limits.Inc = binc;
+                                limits.Inc = Math.Max(0, binc);
                             }
                             i++;
                         }
@@ -320,7 +326,7 @@ namespace Search
                     case "movestogo":
                         if (i + 1 < parts.Length && int.TryParse(parts[i + 1], out int mtg))
                         {
-                            limits.MovesToGo = mtg;
+                            limits.MovesToGo = Math.Max(1, mtg);
                             i++;
                         }
                         break;
@@ -407,7 +413,7 @@ namespace Search
                         // For promotions, check if the promotion piece matches
                         if (moveStr.Length == 5)
                         {
-                            var promoPiece = moveStr[4];
+                            var promoPiece = char.ToLower(moveStr[4]);
                             var expectedFlags = GetPromotionFlags(promoPiece, position.At(to) != Piece.NoPiece);
                             if (moves[i].Flags == expectedFlags)
                             {
@@ -425,16 +431,9 @@ namespace Search
                     }
                 }
 
-                // If no exact match found and it's a promotion, create one
-                if (moveStr.Length == 5)
-                {
-                    var promoPiece = moveStr[4];
-                    var flags = GetPromotionFlags(promoPiece, position.At(to) != Piece.NoPiece);
-                    return new Move.Move(from, to, flags);
-                }
-
-                // Return basic move if no legal move found (shouldn't happen)
-                return new Move.Move(from, to);
+                // If we get here, the move wasn't found in legal moves
+                Console.Error.WriteLine($"Move {moveStr} not found in legal moves for position {position.Fen()}");
+                return new Move.Move();
             }
             catch (Exception ex)
             {
@@ -467,8 +466,9 @@ namespace Search
                         return position.GenerateLegalsInto<Black>(movesPtr);
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Console.Error.WriteLine($"Move generation error: {ex.Message}");
                 return 0;
             }
         }
