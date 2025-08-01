@@ -381,7 +381,7 @@
                     if (document.getElementById('infiniteAnalysisToggle').checked) {
                         startInfiniteAnalysis();
                     } else {
-                        connection.invoke("SendCommand", "go movetime 500");
+                        connection.invoke("SendCommand", "go movetime 3000");
                     }
                 });
             }
@@ -688,7 +688,7 @@
                 stopInfiniteAnalysis();
                 // Ensure position is set before requesting move
                 setEnginePosition().then(() => {
-                    connection.invoke("SendCommand", "go movetime 500");
+                    connection.invoke("SendCommand", "go movetime 3000");
                 });
             }
         });
@@ -722,7 +722,7 @@
                 addToEngineOutput("Requesting engine move...", false);
                 // Ensure position is set before requesting move
                 setEnginePosition().then(() => {
-                    connection.invoke("SendCommand", "go movetime 500");
+                    connection.invoke("SendCommand", "go movetime 3000");
                 });
             }
         });

@@ -19,7 +19,7 @@ namespace Search
         private readonly int[] moveScores = new int[256];
 
         public int OrderMoves(Move.Move[] moves, Move.Move ttMove, Move.Move killer1, Move.Move killer2,
-                            int[,] historyTable, Position position, StaticExchangeEvaluator see, Move.Move counterMove = default)
+                            int[,] historyTable, Position position, Move.Move counterMove = default)
         {
             var moveCount = moves.Length;
 
@@ -42,7 +42,7 @@ namespace Search
                 }
                 else if (move.IsCapture)
                 {
-                    moveScores[i] = ScoreCapture(move, position, see);
+                    moveScores[i] = ScoreCapture(move, position);
                 }
                 else if (move == killer1)
                 {
@@ -95,7 +95,7 @@ namespace Search
 
         // Overload that accepts moveCount parameter for when using pre-allocated arrays
         public int OrderMoves(Move.Move[] moves, int moveCount, Move.Move ttMove, Move.Move killer1, Move.Move killer2,
-                            int[,] historyTable, Position position, Move.Move counterMove, StaticExchangeEvaluator seeEvaluator)
+                            int[,] historyTable, Position position, Move.Move counterMove)
         {
             // First, detect if we have hanging pieces
             var hangingPieces = GetHangingPieces(position);
@@ -119,10 +119,6 @@ namespace Search
                     {
                         moveScores[i] += 10000;
                     }
-                }
-                else if (move.IsCapture)
-                {
-                    moveScores[i] = ScoreCapture(move, position, seeEvaluator);
                 }
                 else if (move == killer1)
                 {
@@ -301,12 +297,12 @@ namespace Search
         }
 
         // Overload that accepts moveCount parameter for when using pre-allocated arrays
-        public int OrderCaptures(Move.Move[] moves, int moveCount, Position position, StaticExchangeEvaluator see)
+        public int OrderCaptures(Move.Move[] moves, int moveCount, Position position)
         {
             // Score captures using MVV-LVA with SEE
             for (int i = 0; i < moveCount; i++)
             {
-                moveScores[i] = ScoreCapture(moves[i], position, see);
+                moveScores[i] = ScoreCapture(moves[i], position);
             }
 
             // Full sort for captures since they're usually fewer
@@ -317,7 +313,7 @@ namespace Search
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private int ScoreCapture(Move.Move move, Position position, StaticExchangeEvaluator seeEvaluator)
+        private int ScoreCapture(Move.Move move, Position position)
         {
             // Special handling for promotions
             if ((move.Flags & MoveFlags.Promotions) != 0)
@@ -342,34 +338,7 @@ namespace Search
             if (move.Flags == MoveFlags.EnPassant)
                 return GOOD_CAPTURE_SCORE + 100;
 
-            // Use SEE for regular captures
-            var seeValue = 0;
-            if (seeEvaluator.SEE(position, move, 0))
-            {
-                // Winning or equal capture
-                var captured = position.At(move.To);
-                var capturedValue = GetPieceValue(Types.TypeOf(captured));
-
-                if (seeEvaluator.SEE(position, move, 1))
-                {
-                    // Clearly winning capture
-                    return GOOD_CAPTURE_SCORE + capturedValue;
-                }
-                else
-                {
-                    // Equal capture
-                    return EQUAL_CAPTURE_SCORE + capturedValue;
-                }
-            }
-            else
-            {
-                // Losing capture - order by least loss
-                var captured = position.At(move.To);
-                var attacker = position.At(move.From);
-                var materialDiff = GetPieceValue(Types.TypeOf(captured)) - GetPieceValue(Types.TypeOf(attacker));
-
-                return BAD_CAPTURE_SCORE + materialDiff;
-            }
+            return 0;
         }
 
         private bool IsPotentiallyHangingMove(Move.Move move, Position position)

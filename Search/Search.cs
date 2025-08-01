@@ -22,8 +22,6 @@ namespace Search
         private readonly TranspositionTable tt;
         private readonly MoveOrdering moveOrdering;
 
-        private readonly StaticExchangeEvaluator seeEvaluator;
-
         // Move generation buffers - pre-allocated per thread
         private readonly Move.Move[][] moveBuffers;
         private readonly ArrayPool<Move.Move> movePool;
@@ -76,8 +74,6 @@ namespace Search
 
             movePool = ArrayPool<Move.Move>.Create(MAX_MOVES, MAX_PLY);
             rootPosition = new Position();
-
-            seeEvaluator = new StaticExchangeEvaluator();
         }
 
         public SearchResult StartSearch(Position position, SearchLimits limits)
@@ -703,9 +699,6 @@ namespace Search
                     // For losing captures, require a higher threshold
                     if (staticEval + 200 < alpha)
                         seeThreshold = -50; // Accept slightly losing captures when behind
-
-                    if (!seeEvaluator.SEE(rootPosition, move, seeThreshold))
-                        continue;
                 }
 
                 QNodes++;
@@ -750,12 +743,6 @@ namespace Search
             }
 
             return bestScore;
-        }
-
-        // Simple Static Exchange Evaluation
-        private bool SEEGreaterOrEqual(Move.Move move, int threshold)
-        {
-            return seeEvaluator.SEE(rootPosition, move, threshold);
         }
 
         private int GetMaterialValue(Piece piece)
@@ -891,12 +878,12 @@ namespace Search
                 counterMoves[(int)prevMove.From, (int)prevMove.To] : new Move.Move();
 
             return moveOrdering.OrderMoves(moves, moveCount, ttMove, killerMoves[ply, 0],
-                                         killerMoves[ply, 1], historyTable, rootPosition, counterMove, seeEvaluator);
+                                         killerMoves[ply, 1], historyTable, rootPosition, counterMove);
         }
 
         private int OrderCapturesInPlace(Move.Move[] moves, int moveCount, int ply)
         {
-            return moveOrdering.OrderCaptures(moves, moveCount, rootPosition, seeEvaluator);
+            return moveOrdering.OrderCaptures(moves, moveCount, rootPosition);
         }
 
         // PV management
